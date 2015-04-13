@@ -5,7 +5,8 @@ require 'aws-sdk'
 require 'json'
 require 'yaml'
 require 'pp'
-require_relative "eni/version"
+require_relative "aws-eni/version"
+require_relative "aws-eni/errors"
 
 URL = "http://169.254.169.254/latest/meta-data/"
 Aws.config.update({
@@ -52,19 +53,17 @@ module AWS
 				req = Net::HTTP.new(url.host, url.port)
 				res = req.request_head(url.path)
 			rescue
-				return false
-				abort "We are not running on EC2."
+				raise EnvironmentError, "We are not running on EC2"
 			else
 				if Net::HTTP.get(URI.parse("#{URL}network/interfaces/macs/#{@macs_arr.first}/vpc-id/")).include? "xml"
-					return false
-					abort "We are not running within VPC."
+					raise EnvironmentError, "We are not running within VPC"
 				else
 					# this internal model should retain a list of interfaces (their names and
 					# their MAC addresses), private ip addresses, and any public ip address
 					# associations.
 					@datahash = Hash.new
 					n = 0
-					@device_number_arr.each { |eth_num| 
+					@device_number_arr.each { |eth_num|
 						@datahash.merge!("eth#{eth_num}" => "#{@private_ip_arr[n]}") if @public_ip_arr[n].include? "xml";
 						@datahash.merge!("eth#{eth_num}" => {"#{@private_ip_arr[n]}" => "#{@public_ip_arr[n]}"}) if not @public_ip_arr[n].include? "xml";
 						n+=1 }
@@ -82,7 +81,7 @@ module AWS
 
 			# return a hash or object representation of the internal model
 			n = 0
-			@device_number_arr.each { |dev| 
+			@device_number_arr.each { |dev|
 				print "eth#{dev}:\n";
 				print "	#{@private_ip_arr[n]}";
 				print " => #{@public_ip_arr[n]}" if not @public_ip_arr[n].include? "xml";
@@ -238,11 +237,5 @@ module AWS
 
 			# return true
 		end
-
-
-
-		list if ARGV.include? 'list'
-		refresh if ARGV.include? 'refresh'
-
 	end
 end

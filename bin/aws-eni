@@ -1,0 +1,32 @@
+#!/usr/bin/env ruby
+
+require 'aws-eni'
+
+begin
+  case ARGV[0]
+
+  # list command
+  when 'list'
+    AWS::ENI.list.each do |dev|
+      # print devices
+    end
+
+  # sync command
+  when 'sync'
+    if AWS::ENI.sync != 0
+      puts 'synchronized interface config'
+    else
+      puts 'network interface config already in sync'
+    end
+
+  # add command
+  when 'add'
+
+  # remove command
+  when 'remove'
+  end
+
+# handle library exceptions
+rescue AWS::ENI::Error => e
+  abort "Error: " + e.message
+end

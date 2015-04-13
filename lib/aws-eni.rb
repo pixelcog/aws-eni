@@ -5,7 +5,7 @@ require 'aws-sdk'
 require 'json'
 require 'yaml'
 require 'pp'
-require_relative "eni/version"
+require_relative "aws-eni/version"
 
 URL = "http://169.254.169.254/latest/meta-data/"
 Aws.config.update({
@@ -64,7 +64,7 @@ module AWS
 					# associations.
 					@datahash = Hash.new
 					n = 0
-					@device_number_arr.each { |eth_num| 
+					@device_number_arr.each { |eth_num|
 						@datahash.merge!("eth#{eth_num}" => "#{@private_ip_arr[n]}") if @public_ip_arr[n].include? "xml";
 						@datahash.merge!("eth#{eth_num}" => {"#{@private_ip_arr[n]}" => "#{@public_ip_arr[n]}"}) if not @public_ip_arr[n].include? "xml";
 						n+=1 }
@@ -82,7 +82,7 @@ module AWS
 
 			# return a hash or object representation of the internal model
 			n = 0
-			@device_number_arr.each { |dev| 
+			@device_number_arr.each { |dev|
 				print "eth#{dev}:\n";
 				print "	#{@private_ip_arr[n]}";
 				print " => #{@public_ip_arr[n]}" if not @public_ip_arr[n].include? "xml";

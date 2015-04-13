@@ -237,11 +237,5 @@ module AWS
 
 			# return true
 		end
-
-
-
-		list if ARGV.include? 'list'
-		refresh if ARGV.include? 'refresh'
-
 	end
 end

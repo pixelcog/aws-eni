@@ -6,6 +6,7 @@ require 'json'
 require 'yaml'
 require 'pp'
 require_relative "aws-eni/version"
+require_relative "aws-eni/errors"
 
 URL = "http://169.254.169.254/latest/meta-data/"
 Aws.config.update({
@@ -52,12 +53,10 @@ module AWS
 				req = Net::HTTP.new(url.host, url.port)
 				res = req.request_head(url.path)
 			rescue
-				return false
-				abort "We are not running on EC2."
+				raise EnvironmentError, "We are not running on EC2"
 			else
 				if Net::HTTP.get(URI.parse("#{URL}network/interfaces/macs/#{@macs_arr.first}/vpc-id/")).include? "xml"
-					return false
-					abort "We are not running within VPC."
+					raise EnvironmentError, "We are not running within VPC"
 				else
 					# this internal model should retain a list of interfaces (their names and
 					# their MAC addresses), private ip addresses, and any public ip address

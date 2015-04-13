@@ -10,9 +10,9 @@ require_relative "aws-eni/errors"
 
 URL = "http://169.254.169.254/latest/meta-data/"
 Aws.config.update({
-	region: 'eu-west-1',
-	credentials: Aws::Credentials.new('akid', 'secret') })
-ec2 = Aws::EC2::Client.new
+	region: ENV['AWS_REGION'],
+	credentials: Aws::SharedCredentials.new(:path => "#{ENV['HOME']}/.aws/config", :profile_name => "default") })
+EC2 = Aws::EC2::Client.new
 
 module AWS
 	module ENI
@@ -61,14 +61,18 @@ module AWS
 					# this internal model should retain a list of interfaces (their names and
 					# their MAC addresses), private ip addresses, and any public ip address
 					# associations.
+					@data_arr = Array.new
 					@datahash = Hash.new
 					n = 0
-					@device_number_arr.each { |eth_num|
-						@datahash.merge!("eth#{eth_num}" => "#{@private_ip_arr[n]}") if @public_ip_arr[n].include? "xml";
-						@datahash.merge!("eth#{eth_num}" => {"#{@private_ip_arr[n]}" => "#{@public_ip_arr[n]}"}) if not @public_ip_arr[n].include? "xml";
+					@device_number_arr.each { |num|
+						@datahash.merge!("device" => "eth#{num}")
+						@datahash.merge!("mac" => "#{@macs_arr[n].gsub('/', '')}")
+						@datahash.merge!("private_ip" => "#{@private_ip_arr[n]}")
+						@datahash.merge!("public_ip" => "#{@public_ip_arr[n]}") if not @public_ip_arr[n].include? "xml"
+						@data_arr << @datahash
 						n+=1 }
 					File.open("data.json","w") do |f|
-						f.write(JSON.pretty_generate(@datahash))
+						f.write(JSON.pretty_generate(@data_arr))
 					end
 					return true
 				end
@@ -80,12 +84,7 @@ module AWS
 			self.refresh if !ready? or refresh
 
 			# return a hash or object representation of the internal model
-			n = 0
-			@device_number_arr.each { |dev|
-				print "eth#{dev}:\n";
-				print "	#{@private_ip_arr[n]}";
-				print " => #{@public_ip_arr[n]}" if not @public_ip_arr[n].include? "xml";
-				print "\n"; n += 1 }
+			return @data_arr
 		end
 
 
@@ -100,7 +99,7 @@ module AWS
 			# also ensure old ips and routes are excised from the config when they are
 			# no longer in our model.
 
-			# see http://engineering.silk.co/post/31923247961/multiple-ip-addresses-on-amazon-ec2
+			# see http://engineering.silk.co/post/31923247961/multiple-ip-addresses-on-amazon-EC2
 			# once configured, one should be able to run the following command for any
 			# ip address with an associated public ip and not have the packets dropped
 			# $ curl --interface ip.add.re.ss ifconfig.me
@@ -128,65 +127,93 @@ module AWS
 
 
 		# create network interface
-		def create
+		def create(refresh=false)
+			self.refresh if !ready? or refresh
 			@subnet_id = Net::HTTP.get(URI.parse("#{URL}network/interfaces/macs/#{@macs_arr.first}/subnet-id"))
-			resp = ec2.create_network_interface(subnet_id: "#{@subnet_id}")
+			resp = EC2.create_network_interface(subnet_id: "#{@subnet_id}")
 			@network_interface_id = resp[:network_interface][:network_interface_id]
-			puts "created interface with id #{@network_interface_id}"
+			# return @network_interface_id
 		end
 
 		# attach network interface
-		def attach
+		def attach(refresh=false)
+			self.refresh if !ready? or refresh
 			@instance_id = Net::HTTP.get(URI.parse("#{URL}instance-id"))
 			n = 0; @new_macs_arr = Array.new
 			@macs_arr.each {|mac| @new_macs_arr.push(Net::HTTP.get(URI.parse("#{URL}network/interfaces/macs/#{mac}/device-number")))}
 			@device_number = @new_macs_arr.sort.last
 			@device_index = @device_number.to_i + 1
-			resp = ec2.attach_network_interface(
+			resp = EC2.attach_network_interface(
 				network_interface_id: "#{@network_interface_id}",
 				instance_id: "#{@instance_id}",
 				device_index: "#{@device_index}",
 			)
-			resp = ec2.describe_network_interfaces(network_interface_ids: ["#{@network_interface_id}"])
-			@eth_ip = resp[:network_interfaces][0][:private_ip_address]
-			puts "attached eth#{@device_index} with private ip #{@eth_ip}"
+			resp = EC2.describe_network_interfaces(network_interface_ids: ["#{@network_interface_id}"])
+			@private_ip = resp[:network_interfaces][0][:private_ip_address]
+			# return @private_ip
 		end
 
 		# detach network interface
-		def detach
-			resp = ec2.describe_network_interfaces(network_interface_ids: ["#{@network_interface_id}"])
+		def detach(refresh=false)
+			self.refresh if !ready? or refresh
+			resp = EC2.describe_network_interfaces(
+				filters: [{
+					name: "private-ip-address",
+					values: ["#{@private_ip}"]
+			}])
+			@network_interface_id = resp[:network_interfaces][0][:network_interface_id]
+			resp = EC2.describe_network_interfaces(network_interface_ids: ["#{@network_interface_id}"])
+			@device_index = resp[:network_interfaces][0][:attachment][:device_index]
 			@network_attachment_id = resp[:network_interfaces][0][:attachment][:attachment_id]
-			resp = ec2.detach_network_interface(
+			resp = EC2.detach_network_interface(
 				attachment_id: "#{@network_attachment_id}",
 				force: true,
 			)
-			puts "detached eth#{@device_index} with private ip #{@eth_ip}"
+			# puts "detached eth#{@device_index} with private ip #{@private_ip}"
 		end
 
 		# delete network interface
-		def delete
-			resp = ec2.describe_network_interfaces(network_interface_ids: ["#{@network_interface_id}"])
+		def delete(refresh=false)
+			self.refresh if !ready? or refresh
+			resp = EC2.describe_network_interfaces(network_interface_ids: ["#{@network_interface_id}"])
 			until resp[:network_interfaces][0][:status] == "available"
 				sleep 5
-				resp = ec2.describe_network_interfaces(network_interface_ids: ["#{@network_interface_id}"])
+				resp = EC2.describe_network_interfaces(network_interface_ids: ["#{@network_interface_id}"])
 			end
-			resp = ec2.delete_network_interface(network_interface_id: "#{@network_interface_id}")
-			puts "removed interface eth#{@device_index} with id #{@network_interface_id}"
+			resp = EC2.delete_network_interface(network_interface_id: "#{@network_interface_id}")
+			# puts "removed interface eth#{@device_index} with id #{@network_interface_id}"
 		end
 
 		# add new private ip using the AWS api and add it to our local ip config
 		def add(private_ip=nil, interface='eth0')
+			begin
+				# use AWS api to add a private ip address to the given interface.
+				# if unspecified, let AWS auto-assign the ip.
+				self.create
+				self.attach
 
-			# use AWS api to add a private ip address to the given interface.
-			# if unspecified, let AWS auto-assign the ip.
+				# add the new ip to the local config with `ip addr add ...` and use
+				# `ip rule ...` or `ip route ...` if necessary
 
-			# add the new ip to the local config with `ip addr add ...` and use
-			# `ip rule ...` or `ip route ...` if necessary
+				sleep 3 while `ip ad sh dev eth#{@device_index} 2>&1`.include? 'does not exist'
+				`sudo dhclient eth#{@device_index}`
+				# `sudo ip ad add #{@private_ip} dev eth#{@device_index}`
+				# `sudo ip link set dev eth#{@device_index} up`
 
-			# throw named exception if the private ip limit is reached, if the ip
-			# specified is already in use, or for any similar error
-
-			# return the new ip
+				# throw named exception if the private ip limit is reached, if the ip
+				# specified is already in use, or for any similar error
+			# rescue
+			# 	raise Error, "The private ip limit is reached"
+			rescue AWS::ENI::Error => e
+				abort "Error: " + e.message
+			else
+				if @private_ip == nil or @device_index == nil
+					raise Error, "No data received from lib while adding interface"
+				else
+					# return the new ip and device
+					return { "private_ip" => @private_ip, "device" => "eth#{@device_index}" }
+				end
+			end
 		end
 
 		# associate a private ip with an elastic ip through the AWS api
@@ -224,18 +251,30 @@ module AWS
 
 		# remove a private ip using the AWS api and remove it from local config also
 		def remove(private_ip, interface=nil, release=true)
+			begin
+				@private_ip = private_ip
+				self.detach
+				self.delete
+				# if interface not provided, infer it from the private ip. if it is
+				# provided check that it corresponds to our private ip or raise an
+				# exception. this is merely a safeguard
 
-			# if interface not provided, infer it from the private ip. if it is
-			# provided check that it corresponds to our private ip or raise an
-			# exception. this is merely a safeguard
+				# if the private ip has an associated EIP, call dissoc and pass in the
+				# provided release parameter
 
-			# if the private ip has an associated EIP, call dissoc and pass in the
-			# provided release parameter
+				# remove the private ip from the local machine's config and routing tables
+				# before using the AWS api to remove the private ip from our ENI.
 
-			# remove the private ip from the local machine's config and routing tables
-			# before using the AWS api to remove the private ip from our ENI.
-
-			# return true
+			rescue
+				raise Error, ""
+			else
+				if @private_ip == nil or @device_index == nil
+					raise Error, "No data received from lib while adding interface"
+				else
+					return { "device" => "eth#{@device_index}", "private_ip" => @private_ip, "public_ip" => @public_ip, "release" => release }
+				end
+			end
 		end
+
 	end
 end

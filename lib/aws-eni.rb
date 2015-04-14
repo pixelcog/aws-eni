@@ -13,7 +13,7 @@ Aws.config.update({
   credentials: Aws::SharedCredentials.new(:path => "#{ENV['HOME']}/.aws/config", :profile_name => "default") })
 EC2 = Aws::EC2::Client.new
 
-module AWS
+module Aws
   module ENI
     extend self
 

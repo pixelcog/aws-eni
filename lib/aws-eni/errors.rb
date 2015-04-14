@@ -1,9 +1,11 @@
-module AWS::ENI
+module Aws
+  module ENI
 
-  class Error < StandardError
+    class Error < StandardError
+    end
+
+    class EnvironmentError < Error
+    end
+
   end
-
-  class EnvironmentError < Error
-  end
-
 end

@@ -1,11 +1,7 @@
+
 module Aws
   module ENI
-
-    class Error < StandardError
-    end
-
-    class EnvironmentError < Error
-    end
-
+    class Error < RuntimeError; end
+    class EnvironmentError < Error; end
   end
 end

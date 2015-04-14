@@ -37,7 +37,15 @@ begin
     else
       puts "removed #{@remove['private_ip']} from #{@remove['device']}"
     end
+
+  # assoc command
+  when 'associate'
+    @assoc = AWS::ENI.assoc(ARGV[1], ARGV[2])
+    puts "associated #{@assoc['private_ip']} => #{@assoc['public_ip']}"
+
+
   end
+
 
 # handle library exceptions
 rescue AWS::ENI::Error => e

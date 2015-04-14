@@ -3,7 +3,6 @@
 require 'net/http'
 require 'aws-sdk'
 require 'json'
-require 'yaml'
 require 'pp'
 require_relative "aws-eni/version"
 require_relative "aws-eni/errors"
@@ -48,6 +47,8 @@ module AWS
 				@macs_arr.each { |mac| @public_ip_arr.push(Net::HTTP.get(URI.parse(
 					"#{URL}network/interfaces/macs/#{mac}/ipv4-associations/"))) }
 
+				@instance_id = Net::HTTP.get(URI.parse("#{URL}instance-id"))
+
 
 				url = URI.parse("#{URL}")
 				req = Net::HTTP.new(url.host, url.port)
@@ -62,9 +63,9 @@ module AWS
 					# their MAC addresses), private ip addresses, and any public ip address
 					# associations.
 					@data_arr = Array.new
-					@datahash = Hash.new
 					n = 0
 					@device_number_arr.each { |num|
+						@datahash = Hash.new
 						@datahash.merge!("device" => "eth#{num}")
 						@datahash.merge!("mac" => "#{@macs_arr[n].gsub('/', '')}")
 						@datahash.merge!("private_ip" => "#{@private_ip_arr[n]}")
@@ -214,9 +215,20 @@ module AWS
 
 		# associate a private ip with an elastic ip through the AWS api
 		def assoc(private_ip, public_ip=nil)
+			self.refresh if !ready? or refresh
 
 			# check that the private ip exists within our internal model and infer the
 			# interface from that, throw exception otherwise
+			@data_arr.each { |dev| @private_ip_exists = true if private_ip == dev['private_ip'] }
+			raise Error, "Specified private ip does not exists" if @private_ip_exists == nil
+
+			@private_ip = private_ip
+			resp = EC2.describe_network_interfaces(
+				filters: [{
+					name: "private-ip-address",
+					values: ["#{@private_ip}"]
+			}])
+			@network_interface_id = resp[:network_interfaces][0][:network_interface_id]
 
 			# if the public_ip parameter is specified use the AWS api to find an
 			# existing "elastic ip" in this account and throw exception if it does not
@@ -227,7 +239,41 @@ module AWS
 			# associate this EIP with the provided private ip and the eni device we
 			# inferred from it using the AWS api
 
+			if public_ip != nil
+				@public_ip = public_ip
+				resp = EC2.describe_addresses(
+					public_ips: ["#{@public_ip}"],
+					# allocation_ids: ["String", '...'],
+				)
+
+				raise Error, "IP does not exists" if resp['addresses'][0]['public_ip'] != @public_ip
+				raise Error, "IP already associated with another interface" if resp['addresses'][0]['association_id'] != nil
+
+				@allocation_id = resp['addresses'][0]['allocation_id']
+				resp = EC2.associate_address(
+					allocation_id: "#{@allocation_id}",
+					network_interface_id: "#{@network_interface_id}",
+					private_ip_address: "#{@private_ip}",
+					allow_reassociation: true,
+				)
+			else
+				resp = EC2.allocate_address(domain: "vpc")
+				@public_ip = resp['public_ip']
+				@allocation_id = resp['allocation_id']
+
+				resp = EC2.associate_address(
+					# instance_id: "#{@instance_id}",
+					# public_ip: "#{@public_ip}",
+					allocation_id: "#{@allocation_id}",
+					network_interface_id: "#{@network_interface_id}",
+					private_ip_address: "#{@private_ip}",
+					allow_reassociation: true,
+				)
+				@association_id = resp['association_id']
+			end
+
 			# return the public ip
+			return { "private_ip" => @private_ip, "public_ip" => @public_ip }
 		end
 
 		# dissociate a public ip from a private ip through the AWS api and
@@ -265,7 +311,7 @@ module AWS
 				raise Error, ""
 			else
 				if @private_ip == nil or @device_index == nil
-					raise Error, "No data received from lib while removing interface"
+					raise Error, "No data received from lib while adding interface"
 				else
 					return { "device" => "eth#{@device_index}", "private_ip" => @private_ip, "public_ip" => @public_ip, "release" => release }
 				end

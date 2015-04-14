@@ -12,17 +12,10 @@ Aws.config.update({
 EC2 = Aws::EC2::Client.new
 
 module Aws
-  module ENI
-    extend self
+  class ENI
 
-    def ready?
-      # return true if the internal model has been set (i.e. refresh has been called at laest once)
-      if @datahash != nil
-      # if File.exist?("data.json")
-        return true
-      else
-        return false
-      end
+    def initialize
+      refresh
     end
 
     # pull instance metadata, update internal model
@@ -76,7 +69,7 @@ module Aws
 
     # return our internal model of this instance's network configuration on AWS
     def list(refresh=false)
-      self.refresh if !ready? or refresh
+      self.refresh if refresh
 
       # return a hash or object representation of the internal model
       return @data_arr
@@ -85,7 +78,7 @@ module Aws
 
     # sync local machine's network interface config with the AWS config
     def sync(refresh=false)
-      self.refresh if !ready? or refresh
+      self.refresh if refresh
       sys_network = `ip ad sh`
 
       # use `ip addr ...` commands to list and validate the local network
@@ -123,7 +116,7 @@ module Aws
 
     # create network interface
     def create(refresh=false)
-      self.refresh if !ready? or refresh
+      self.refresh if refresh
       @subnet_id = Net::HTTP.get(URI.parse("#{URL}network/interfaces/macs/#{@macs_arr.first}/subnet-id"))
       resp = EC2.create_network_interface(subnet_id: "#{@subnet_id}")
       @network_interface_id = resp[:network_interface][:network_interface_id]
@@ -131,7 +124,7 @@ module Aws
 
     # attach network interface
     def attach(refresh=false)
-      self.refresh if !ready? or refresh
+      self.refresh if refresh
       @instance_id = Net::HTTP.get(URI.parse("#{URL}instance-id"))
       n = 0; @new_macs_arr = Array.new
       @macs_arr.each {|mac| @new_macs_arr.push(Net::HTTP.get(URI.parse("#{URL}network/interfaces/macs/#{mac}/device-number")))}
@@ -148,7 +141,7 @@ module Aws
 
     # detach network interface
     def detach(refresh=false)
-      self.refresh if !ready? or refresh
+      self.refresh if refresh
       resp = EC2.describe_network_interfaces(
         filters: [{
           name: "private-ip-address",
@@ -167,7 +160,7 @@ module Aws
 
     # delete network interface
     def delete(refresh=false)
-      self.refresh if !ready? or refresh
+      self.refresh if refresh
       resp = EC2.describe_network_interfaces(network_interface_ids: ["#{@network_interface_id}"])
       until resp[:network_interfaces][0][:status] == "available"
         sleep 5
@@ -209,7 +202,7 @@ module Aws
 
     # associate a private ip with an elastic ip through the AWS api
     def assoc(private_ip, public_ip=nil)
-      self.refresh if !ready? or refresh
+      self.refresh if refresh
 
       # check that the private ip exists within our internal model and infer the
       # interface from that, throw exception otherwise

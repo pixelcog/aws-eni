@@ -2,12 +2,14 @@
 
 require 'aws-eni'
 
+eni = Aws::ENI.new
+
 begin
   case ARGV[0]
 
   # list command
   when 'list'
-    Aws::ENI.list.each do |dev|
+    eni.list.each do |dev|
       # print devices
       print "#{dev['device']}:", "\n"
       print "  #{dev['private_ip']}"
@@ -18,7 +20,7 @@ begin
 
   # sync command
   when 'sync'
-    if Aws::ENI.sync != 0
+    if eni.sync != 0
       puts 'synchronized interface config'
     else
       puts 'network interface config already in sync'
@@ -26,12 +28,12 @@ begin
 
   # add command
   when 'add'
-    @add = Aws::ENI.add(ARGV[1], ARGV[2])
+    @add = eni.add(ARGV[1], ARGV[2])
     puts "added #{@add['device']} with private ip #{@add['private_ip']}"
 
   # remove command
   when 'remove'
-    @remove = Aws::ENI.remove(ARGV[1], ARGV[2], ARGV[3])
+    @remove = eni.remove(ARGV[1], ARGV[2], ARGV[3])
     if @remove['release'] == true
       puts "removed #{@remove['private_ip']} and dissociated #{remove['public_ip']} from #{@remove['device']}"
     else
@@ -40,7 +42,7 @@ begin
 
   # assoc command
   when 'associate'
-    @assoc = Aws::ENI.assoc(ARGV[1], ARGV[2])
+    @assoc = eni.assoc(ARGV[1], ARGV[2])
     puts "associated #{@assoc['private_ip']} => #{@assoc['public_ip']}"
 
 

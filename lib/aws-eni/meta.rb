@@ -1,5 +1,5 @@
 module Aws
-  module ENI
+  class ENI
     module Meta
 
       # EC2 instance meta-data connection settings

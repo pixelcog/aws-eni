@@ -132,7 +132,6 @@ module AWS
 			@subnet_id = Net::HTTP.get(URI.parse("#{URL}network/interfaces/macs/#{@macs_arr.first}/subnet-id"))
 			resp = EC2.create_network_interface(subnet_id: "#{@subnet_id}")
 			@network_interface_id = resp[:network_interface][:network_interface_id]
-			# return @network_interface_id
 		end
 
 		# attach network interface
@@ -150,7 +149,6 @@ module AWS
 			)
 			resp = EC2.describe_network_interfaces(network_interface_ids: ["#{@network_interface_id}"])
 			@private_ip = resp[:network_interfaces][0][:private_ip_address]
-			# return @private_ip
 		end
 
 		# detach network interface
@@ -202,10 +200,8 @@ module AWS
 
 				# throw named exception if the private ip limit is reached, if the ip
 				# specified is already in use, or for any similar error
-			# rescue
-			# 	raise Error, "The private ip limit is reached"
-			rescue AWS::ENI::Error => e
-				abort "Error: " + e.message
+			rescue
+				raise Error, "The private ip limit is reached"
 			else
 				if @private_ip == nil or @device_index == nil
 					raise Error, "No data received from lib while adding interface"
@@ -269,7 +265,7 @@ module AWS
 				raise Error, ""
 			else
 				if @private_ip == nil or @device_index == nil
-					raise Error, "No data received from lib while adding interface"
+					raise Error, "No data received from lib while removing interface"
 				else
 					return { "device" => "eth#{@device_index}", "private_ip" => @private_ip, "public_ip" => @public_ip, "release" => release }
 				end

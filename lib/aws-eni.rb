@@ -4,8 +4,7 @@ require 'net/http'
 require 'aws-sdk'
 require 'json'
 require 'pp'
-require_relative "aws-eni/version"
-require_relative "aws-eni/errors"
+require 'aws-eni/errors'
 
 URL = "http://169.254.169.254/latest/meta-data/"
 Aws.config.update({

@@ -9,6 +9,11 @@ begin
   when 'list'
     AWS::ENI.list.each do |dev|
       # print devices
+      print "#{dev['device']}:", "\n"
+      print "  #{dev['private_ip']}"
+      print "\n" if dev['public_ip'] == nil
+      print " => #{dev['public_ip']}", "\n" if dev['public_ip'] != nil
+      # print "MAC: ", dev['mac'], "\n"
     end
 
   # sync command
@@ -21,9 +26,17 @@ begin
 
   # add command
   when 'add'
+    @add = AWS::ENI.add(ARGV[1], ARGV[2])
+    puts "added #{@add['device']} with private ip #{@add['private_ip']}"
 
   # remove command
   when 'remove'
+    @remove = AWS::ENI.remove(ARGV[1], ARGV[2], ARGV[3])
+    if @remove['release'] == true
+      puts "removed #{@remove['private_ip']} and dissociated #{remove['public_ip']} from #{@remove['device']}"
+    else
+      puts "removed #{@remove['private_ip']} from #{@remove['device']}"
+    end
   end
 
 # handle library exceptions

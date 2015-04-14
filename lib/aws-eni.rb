@@ -5,6 +5,7 @@ require 'aws-sdk'
 require 'json'
 require 'pp'
 require 'aws-eni/errors'
+require 'aws-eni/meta'
 
 URL = "http://169.254.169.254/latest/meta-data/"
 Aws.config.update({
@@ -28,55 +29,51 @@ module Aws
 
     # pull instance metadata, update internal model
     def refresh
-      # throw exception if we are not running on EC2 or if we are not running within VPC
+
       begin
-        @macs = Net::HTTP.get(URI.parse("#{URL}network/interfaces/macs/"))
-        @macs_arr = Array.new
-        @macs_arr = @macs.split(/\n/)
+        Meta.run do |conn|
+          @macs = Meta.http_get(conn, 'network/interfaces/macs/')
+          @macs_arr = Array.new
+          @macs_arr = @macs.split(/\n/)
 
-        @device_number_arr = Array.new
-        @macs_arr.each { |mac| @device_number_arr.push(Net::HTTP.get(URI.parse(
-          "#{URL}network/interfaces/macs/#{mac}/device-number"))) }
+          @device_number_arr = Array.new
+          @macs_arr.each { |mac| @device_number_arr.push(Meta.http_get(conn,
+            "network/interfaces/macs/#{mac}/device-number")) }
 
-        @private_ip_arr = Array.new
-        @macs_arr.each { |mac| @private_ip_arr.push(Net::HTTP.get(URI.parse(
-          "#{URL}network/interfaces/macs/#{mac}/local-ipv4s"))) }
+          @private_ip_arr = Array.new
+          @macs_arr.each { |mac| @private_ip_arr.push(Meta.http_get(conn,
+            "network/interfaces/macs/#{mac}/local-ipv4s")) }
 
-        @public_ip_arr = Array.new
-        @macs_arr.each { |mac| @public_ip_arr.push(Net::HTTP.get(URI.parse(
-          "#{URL}network/interfaces/macs/#{mac}/ipv4-associations/"))) }
+          @public_ip_arr = Array.new
+          @macs_arr.each { |mac| @public_ip_arr.push(Meta.http_get(conn,
+            "network/interfaces/macs/#{mac}/ipv4-associations/")) }
 
-        @instance_id = Net::HTTP.get(URI.parse("#{URL}instance-id"))
+          @instance_id = Meta.http_get(conn, "instance-id")
 
-
-        url = URI.parse("#{URL}")
-        req = Net::HTTP.new(url.host, url.port)
-        res = req.request_head(url.path)
-      rescue
-        raise EnvironmentError, "We are not running on EC2"
-      else
-        if Net::HTTP.get(URI.parse("#{URL}network/interfaces/macs/#{@macs_arr.first}/vpc-id/")).include? "xml"
-          raise EnvironmentError, "We are not running within VPC"
-        else
-          # this internal model should retain a list of interfaces (their names and
-          # their MAC addresses), private ip addresses, and any public ip address
-          # associations.
-          @data_arr = Array.new
-          n = 0
-          @device_number_arr.each { |num|
-            @datahash = Hash.new
-            @datahash.merge!("device" => "eth#{num}")
-            @datahash.merge!("mac" => "#{@macs_arr[n].gsub('/', '')}")
-            @datahash.merge!("private_ip" => "#{@private_ip_arr[n]}")
-            @datahash.merge!("public_ip" => "#{@public_ip_arr[n]}") if not @public_ip_arr[n].include? "xml"
-            @data_arr << @datahash
-            n+=1 }
-          File.open("data.json","w") do |f|
-            f.write(JSON.pretty_generate(@data_arr))
-          end
-          return true
+          @vpc_id = Meta.http_get(conn, "network/interfaces/macs/#{@macs_arr.first}/vpc-id") rescue nil
+          raise EnvironmentError, "We are not running within VPC" unless @vpc_id
         end
+      rescue Meta::ConnectionFailed => e
+        raise EnvironmentError, "We are not running on EC2 (unable to access instance metadata)"
       end
+
+      # this internal model should retain a list of interfaces (their names and
+      # their MAC addresses), private ip addresses, and any public ip address
+      # associations.
+      @data_arr = Array.new
+      n = 0
+      @device_number_arr.each { |num|
+        @datahash = Hash.new
+        @datahash.merge!("device" => "eth#{num}")
+        @datahash.merge!("mac" => "#{@macs_arr[n].gsub('/', '')}")
+        @datahash.merge!("private_ip" => "#{@private_ip_arr[n]}")
+        @datahash.merge!("public_ip" => "#{@public_ip_arr[n]}") if not @public_ip_arr[n].include? "xml"
+        @data_arr << @datahash
+        n+=1 }
+      File.open("data.json","w") do |f|
+        f.write(JSON.pretty_generate(@data_arr))
+      end
+      return true
     end
 
     # return our internal model of this instance's network configuration on AWS

@@ -1,6 +1,5 @@
 require 'net/http'
 require 'aws-sdk'
-require 'json'
 require 'pp'
 require 'aws-eni/errors'
 require 'aws-eni/meta'
@@ -60,9 +59,6 @@ module Aws
         @datahash.merge!("public_ip" => "#{@public_ip_arr[n]}") if not @public_ip_arr[n].include? "xml"
         @data_arr << @datahash
         n+=1 }
-      File.open("data.json","w") do |f|
-        f.write(JSON.pretty_generate(@data_arr))
-      end
       return true
     end
 

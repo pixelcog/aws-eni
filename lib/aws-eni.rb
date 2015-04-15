@@ -2,16 +2,13 @@ require 'aws-sdk'
 require 'aws-eni/errors'
 require 'aws-eni/meta'
 
-Aws.config.update({
-  region: ENV['AWS_REGION'],
-  credentials: Aws::SharedCredentials.new(:path => "#{ENV['HOME']}/.aws/config", :profile_name => "default") })
-EC2 = Aws::EC2::Client.new
-
 module Aws
   class ENI
 
     def initialize
       refresh
+      Aws::config.update({region: @region})
+      @api = Aws::EC2::Client.new
     end
 
     # pull instance metadata, update internal model
@@ -19,6 +16,9 @@ module Aws
 
       begin
         Meta.open_connection do |conn|
+          @availability_zone = Meta.http_get(conn, 'placement/availability-zone/')
+          @region = @availability_zone.sub(/(.*)[a-z]/,'\1')
+
           @macs = Meta.http_get(conn, 'network/interfaces/macs/')
           @macs_arr = Array.new
           @macs_arr = @macs.split(/\n/)
@@ -80,7 +80,7 @@ module Aws
       # also ensure old ips and routes are excised from the config when they are
       # no longer in our model.
 
-      # see http://engineering.silk.co/post/31923247961/multiple-ip-addresses-on-amazon-EC2
+      # see http://engineering.silk.co/post/31923247961/multiple-ip-addresses-on-amazon-ec2
       # once configured, one should be able to run the following command for any
       # ip address with an associated public ip and not have the packets dropped
       # $ curl --interface ip.add.re.ss ifconfig.me
@@ -111,7 +111,7 @@ module Aws
     def create(refresh=false)
       self.refresh if refresh
       @subnet_id = Meta.get("network/interfaces/macs/#{@macs_arr.first}/subnet-id")
-      resp = EC2.create_network_interface(subnet_id: "#{@subnet_id}")
+      resp = @api.create_network_interface(subnet_id: "#{@subnet_id}")
       @network_interface_id = resp[:network_interface][:network_interface_id]
     end
 
@@ -123,28 +123,28 @@ module Aws
       @macs_arr.each {|mac| @new_macs_arr.push(Meta.get("network/interfaces/macs/#{mac}/device-number"))}
       @device_number = @new_macs_arr.sort.last
       @device_index = @device_number.to_i + 1
-      resp = EC2.attach_network_interface(
+      resp = @api.attach_network_interface(
         network_interface_id: "#{@network_interface_id}",
         instance_id: "#{@instance_id}",
         device_index: "#{@device_index}",
       )
-      resp = EC2.describe_network_interfaces(network_interface_ids: ["#{@network_interface_id}"])
+      resp = @api.describe_network_interfaces(network_interface_ids: ["#{@network_interface_id}"])
       @private_ip = resp[:network_interfaces][0][:private_ip_address]
     end
 
     # detach network interface
     def detach(refresh=false)
       self.refresh if refresh
-      resp = EC2.describe_network_interfaces(
+      resp = @api.describe_network_interfaces(
         filters: [{
           name: "private-ip-address",
           values: ["#{@private_ip}"]
       }])
       @network_interface_id = resp[:network_interfaces][0][:network_interface_id]
-      resp = EC2.describe_network_interfaces(network_interface_ids: ["#{@network_interface_id}"])
+      resp = @api.describe_network_interfaces(network_interface_ids: ["#{@network_interface_id}"])
       @device_index = resp[:network_interfaces][0][:attachment][:device_index]
       @network_attachment_id = resp[:network_interfaces][0][:attachment][:attachment_id]
-      resp = EC2.detach_network_interface(
+      resp = @api.detach_network_interface(
         attachment_id: "#{@network_attachment_id}",
         force: true,
       )
@@ -154,12 +154,12 @@ module Aws
     # delete network interface
     def delete(refresh=false)
       self.refresh if refresh
-      resp = EC2.describe_network_interfaces(network_interface_ids: ["#{@network_interface_id}"])
+      resp = @api.describe_network_interfaces(network_interface_ids: ["#{@network_interface_id}"])
       until resp[:network_interfaces][0][:status] == "available"
         sleep 5
-        resp = EC2.describe_network_interfaces(network_interface_ids: ["#{@network_interface_id}"])
+        resp = @api.describe_network_interfaces(network_interface_ids: ["#{@network_interface_id}"])
       end
-      resp = EC2.delete_network_interface(network_interface_id: "#{@network_interface_id}")
+      resp = @api.delete_network_interface(network_interface_id: "#{@network_interface_id}")
       # puts "removed interface eth#{@device_index} with id #{@network_interface_id}"
     end
 
@@ -203,7 +203,7 @@ module Aws
       raise Error, "Specified private ip does not exists" if @private_ip_exists == nil
 
       @private_ip = private_ip
-      resp = EC2.describe_network_interfaces(
+      resp = @api.describe_network_interfaces(
         filters: [{
           name: "private-ip-address",
           values: ["#{@private_ip}"]
@@ -221,7 +221,7 @@ module Aws
 
       if public_ip != nil
         @public_ip = public_ip
-        resp = EC2.describe_addresses(
+        resp = @api.describe_addresses(
           public_ips: ["#{@public_ip}"],
           # allocation_ids: ["String", '...'],
         )
@@ -230,18 +230,18 @@ module Aws
         raise Error, "IP already associated with another interface" if resp['addresses'][0]['association_id'] != nil
 
         @allocation_id = resp['addresses'][0]['allocation_id']
-        resp = EC2.associate_address(
+        resp = @api.associate_address(
           allocation_id: "#{@allocation_id}",
           network_interface_id: "#{@network_interface_id}",
           private_ip_address: "#{@private_ip}",
           allow_reassociation: true,
         )
       else
-        resp = EC2.allocate_address(domain: "vpc")
+        resp = @api.allocate_address(domain: "vpc")
         @public_ip = resp['public_ip']
         @allocation_id = resp['allocation_id']
 
-        resp = EC2.associate_address(
+        resp = @api.associate_address(
           # instance_id: "#{@instance_id}",
           # public_ip: "#{@public_ip}",
           allocation_id: "#{@allocation_id}",

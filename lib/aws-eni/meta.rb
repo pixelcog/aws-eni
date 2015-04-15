@@ -7,6 +7,7 @@ module Aws
       PORT = '80'
       BASE = '/latest/meta-data/'
 
+      # Custom exception classes
       class Non200Response < RuntimeError; end
       class ConnectionFailed < RuntimeError; end
 
@@ -23,13 +24,25 @@ module Aws
         Non200Response,
       ]
 
-      # Attempt to execute the open connection block :retries times. All other
-      # options pass through to open_connection.
-      def self.run(options = {}, &block)
+      # Open connection and run a single GET request on the instance metadata
+      # endpoint. Same options as open_connection.
+      def self.get(path, options = {})
+        open_connection options do |conn|
+          http_get(conn, path)
+        end
+      end
+
+      # Open a connection and attempt to execute the block `retries` times.
+      # Can specify open and read timeouts in addition to the number of retries.
+      def self.open_connection(options = {})
         retries = options[:retries] || 5
         failed_attempts = 0
         begin
-          open_connection(options, &block)
+          http = Net::HTTP.new(HOST, PORT, nil)
+          http.open_timeout = options[:open_timeout] || 5
+          http.read_timeout = options[:read_timeout] || 5
+          http.start
+          yield(http).tap { http.finish }
         rescue *FAILURES => e
           if failed_attempts < retries
             # retry after an ever increasing cooldown time with each failure
@@ -40,16 +53,6 @@ module Aws
             raise ConnectionFailed, "Connection failed after #{retries} retries."
           end
         end
-      end
-
-      # Open a connection to the instance metadata endpoint with optional
-      # settings for open and read timeouts.
-      def self.open_connection(options = {})
-        http = Net::HTTP.new(HOST, PORT, nil)
-        http.open_timeout = options[:open_timeout] || 5
-        http.read_timeout = options[:read_timeout] || 5
-        http.start
-        yield(http).tap { http.finish }
       end
 
       # Perform a GET request on an open connection to the instance metadata

@@ -5,7 +5,6 @@ require 'pp'
 require 'aws-eni/errors'
 require 'aws-eni/meta'
 
-URL = "http://169.254.169.254/latest/meta-data/"
 Aws.config.update({
   region: ENV['AWS_REGION'],
   credentials: Aws::SharedCredentials.new(:path => "#{ENV['HOME']}/.aws/config", :profile_name => "default") })
@@ -22,7 +21,7 @@ module Aws
     def refresh
 
       begin
-        Meta.run do |conn|
+        Meta.open_connection do |conn|
           @macs = Meta.http_get(conn, 'network/interfaces/macs/')
           @macs_arr = Array.new
           @macs_arr = @macs.split(/\n/)
@@ -117,7 +116,7 @@ module Aws
     # create network interface
     def create(refresh=false)
       self.refresh if refresh
-      @subnet_id = Net::HTTP.get(URI.parse("#{URL}network/interfaces/macs/#{@macs_arr.first}/subnet-id"))
+      @subnet_id = Meta.get("network/interfaces/macs/#{@macs_arr.first}/subnet-id")
       resp = EC2.create_network_interface(subnet_id: "#{@subnet_id}")
       @network_interface_id = resp[:network_interface][:network_interface_id]
     end
@@ -125,9 +124,9 @@ module Aws
     # attach network interface
     def attach(refresh=false)
       self.refresh if refresh
-      @instance_id = Net::HTTP.get(URI.parse("#{URL}instance-id"))
+      @instance_id = Meta.get("instance-id")
       n = 0; @new_macs_arr = Array.new
-      @macs_arr.each {|mac| @new_macs_arr.push(Net::HTTP.get(URI.parse("#{URL}network/interfaces/macs/#{mac}/device-number")))}
+      @macs_arr.each {|mac| @new_macs_arr.push(Meta.get("network/interfaces/macs/#{mac}/device-number"))}
       @device_number = @new_macs_arr.sort.last
       @device_index = @device_number.to_i + 1
       resp = EC2.attach_network_interface(

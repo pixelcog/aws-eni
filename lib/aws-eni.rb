@@ -1,6 +1,4 @@
-require 'net/http'
 require 'aws-sdk'
-require 'pp'
 require 'aws-eni/errors'
 require 'aws-eni/meta'
 

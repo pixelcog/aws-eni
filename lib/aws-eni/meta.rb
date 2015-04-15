@@ -1,3 +1,6 @@
+require 'time'
+require 'net/http'
+
 module Aws
   class ENI
     module Meta

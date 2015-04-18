@@ -6,68 +6,64 @@ module Aws
   class ENI
 
     def initialize
+      hwaddr = IO.read("/sys/class/net/eth0/address").strip
+      @instance = {}
+      @instance_id = Meta.get('instance-id')
+      @availability_zone = Meta.get('placement/availability-zone')
+      @region = @availability_zone.sub(/(.*)[a-z]/,'\1')
+      @vpc_id = Meta.get("network/interfaces/macs/#{hwaddr}/vpc-id")
+      unless @vpc_id
+        raise EnvironmentError, "Unable to detect VPC settings, library incompatible with EC2-Classic"
+      end
       refresh
-      Aws::config.update({region: @region})
-      @api = Aws::EC2::Client.new
+    rescue Meta::ConnectionFailed
+      raise EnvironmentError, "Unable to load EC2 meta-data"
     end
 
     # pull instance metadata, update internal model
     def refresh
-
-      begin
+      @interfaces = []
+      @public_ips = {}
+      Meta.get("network/interfaces/macs/").each_line do |hwaddr|
+        hwaddr = hwaddr.strip.chomp '/'
+        dev_path = "network/interfaces/macs/#{hwaddr}"
         Meta.open_connection do |conn|
-          @availability_zone = Meta.http_get(conn, 'placement/availability-zone/')
-          @region = @availability_zone.sub(/(.*)[a-z]/,'\1')
-
-          @macs = Meta.http_get(conn, 'network/interfaces/macs/')
-          @macs_arr = Array.new
-          @macs_arr = @macs.split(/\n/)
-
-          @device_number_arr = Array.new
-          @macs_arr.each { |mac| @device_number_arr.push(Meta.http_get(conn,
-            "network/interfaces/macs/#{mac}/device-number")) }
-
-          @private_ip_arr = Array.new
-          @macs_arr.each { |mac| @private_ip_arr.push(Meta.http_get(conn,
-            "network/interfaces/macs/#{mac}/local-ipv4s")) }
-
-          @public_ip_arr = Array.new
-          @macs_arr.each { |mac| @public_ip_arr.push(Meta.http_get(conn,
-            "network/interfaces/macs/#{mac}/ipv4-associations/")) }
-
-          @instance_id = Meta.http_get(conn, "instance-id")
-
-          @vpc_id = Meta.http_get(conn, "network/interfaces/macs/#{@macs_arr.first}/vpc-id") rescue nil
-          raise EnvironmentError, "We are not running within VPC" unless @vpc_id
+          index = Meta.http_get(conn, "#{dev_path}/device-number").to_i
+          @interfaces[index] = {
+            name:         "eth#{index}",
+            hwaddr:       hwaddr,
+            interface_id: Meta.http_get(conn, "#{dev_path}/interface-id"),
+            subnet_id:    Meta.http_get(conn, "#{dev_path}/subnet-id"),
+            subnet_cidr:  Meta.http_get(conn, "#{dev_path}/subnet-ipv4-cidr-block"),
+            local_ips:    Meta.http_get(conn, "#{dev_path}/local-ipv4s").lines.map(&:strip)
+          }
+          @interfaces[index][:ip_assoc] = Hash[@interfaces[index][:local_ips].zip([])]
+          Meta.http_get(conn, "#{dev_path}/ipv4-associations/").to_s.each_line do |public_ip|
+            public_ip.strip!
+            local_ip = Meta.http_get(conn, "#{dev_path}/ipv4-associations/#{public_ip}")
+            @interfaces[index][:ip_assoc][local_ip] = public_ip
+            @public_ips[public_ip] = {
+              local_ip: local_ip,
+              interface_id: @interfaces[index][:interface_id]
+            }
+          end
         end
-      rescue Meta::ConnectionFailed => e
-        raise EnvironmentError, "We are not running on EC2 (unable to access instance metadata)"
       end
-
-      # this internal model should retain a list of interfaces (their names and
-      # their MAC addresses), private ip addresses, and any public ip address
-      # associations.
-      @data_arr = Array.new
-      n = 0
-      @device_number_arr.each { |num|
-        @datahash = Hash.new
-        @datahash.merge!("device" => "eth#{num}")
-        @datahash.merge!("mac" => "#{@macs_arr[n].gsub('/', '')}")
-        @datahash.merge!("private_ip" => "#{@private_ip_arr[n]}")
-        @datahash.merge!("public_ip" => "#{@public_ip_arr[n]}") if not @public_ip_arr[n].include? "xml"
-        @data_arr << @datahash
-        n+=1 }
-      return true
+    rescue Meta::ConnectionFailed
+      raise EnvironmentError, "Unable to load EC2 meta-data"
     end
 
     # return our internal model of this instance's network configuration on AWS
-    def list(refresh=false)
-      self.refresh if refresh
-
-      # return a hash or object representation of the internal model
-      return @data_arr
+    def list(name = nil, options = {})
+      refresh if options[:refresh]
+      @interfaces.compact.select do |dev|
+        !name || dev[:name] == name || dev[:interface_id] == name
+      end.tap do |list|
+        if name && list.empty?
+          raise UnknownInterfaceError, "Unknown interface: #{name}"
+        end
+      end
     end
-
 
     # sync local machine's network interface config with the AWS config
     def sync(refresh=false)
@@ -106,12 +102,16 @@ module Aws
     # address (i.e. '0e:96:b6:4a:15:2c') within our internal model as we learn
     # them to make meta-data lookups and API calls easier.
 
+    # lazy-load our aws api client as many commands do not require it
+    def ec2_client
+      @ec2_client ||= Aws::EC2::Client.new(region: @region)
+    end
 
     # create network interface
     def create(refresh=false)
       self.refresh if refresh
       @subnet_id = Meta.get("network/interfaces/macs/#{@macs_arr.first}/subnet-id")
-      resp = @api.create_network_interface(subnet_id: "#{@subnet_id}")
+      resp = ec2_client.create_network_interface(subnet_id: "#{@subnet_id}")
       @network_interface_id = resp[:network_interface][:network_interface_id]
     end
 
@@ -123,28 +123,28 @@ module Aws
       @macs_arr.each {|mac| @new_macs_arr.push(Meta.get("network/interfaces/macs/#{mac}/device-number"))}
       @device_number = @new_macs_arr.sort.last
       @device_index = @device_number.to_i + 1
-      resp = @api.attach_network_interface(
+      resp = ec2_client.attach_network_interface(
         network_interface_id: "#{@network_interface_id}",
         instance_id: "#{@instance_id}",
         device_index: "#{@device_index}",
       )
-      resp = @api.describe_network_interfaces(network_interface_ids: ["#{@network_interface_id}"])
+      resp = ec2_client.describe_network_interfaces(network_interface_ids: ["#{@network_interface_id}"])
       @private_ip = resp[:network_interfaces][0][:private_ip_address]
     end
 
     # detach network interface
     def detach(refresh=false)
       self.refresh if refresh
-      resp = @api.describe_network_interfaces(
+      resp = ec2_client.describe_network_interfaces(
         filters: [{
           name: "private-ip-address",
           values: ["#{@private_ip}"]
       }])
       @network_interface_id = resp[:network_interfaces][0][:network_interface_id]
-      resp = @api.describe_network_interfaces(network_interface_ids: ["#{@network_interface_id}"])
+      resp = ec2_client.describe_network_interfaces(network_interface_ids: ["#{@network_interface_id}"])
       @device_index = resp[:network_interfaces][0][:attachment][:device_index]
       @network_attachment_id = resp[:network_interfaces][0][:attachment][:attachment_id]
-      resp = @api.detach_network_interface(
+      resp = ec2_client.detach_network_interface(
         attachment_id: "#{@network_attachment_id}",
         force: true,
       )
@@ -154,12 +154,12 @@ module Aws
     # delete network interface
     def delete(refresh=false)
       self.refresh if refresh
-      resp = @api.describe_network_interfaces(network_interface_ids: ["#{@network_interface_id}"])
+      resp = ec2_client.describe_network_interfaces(network_interface_ids: ["#{@network_interface_id}"])
       until resp[:network_interfaces][0][:status] == "available"
         sleep 5
-        resp = @api.describe_network_interfaces(network_interface_ids: ["#{@network_interface_id}"])
+        resp = ec2_client.describe_network_interfaces(network_interface_ids: ["#{@network_interface_id}"])
       end
-      resp = @api.delete_network_interface(network_interface_id: "#{@network_interface_id}")
+      resp = ec2_client.delete_network_interface(network_interface_id: "#{@network_interface_id}")
       # puts "removed interface eth#{@device_index} with id #{@network_interface_id}"
     end
 
@@ -203,7 +203,7 @@ module Aws
       raise Error, "Specified private ip does not exists" if @private_ip_exists == nil
 
       @private_ip = private_ip
-      resp = @api.describe_network_interfaces(
+      resp = ec2_client.describe_network_interfaces(
         filters: [{
           name: "private-ip-address",
           values: ["#{@private_ip}"]
@@ -221,7 +221,7 @@ module Aws
 
       if public_ip != nil
         @public_ip = public_ip
-        resp = @api.describe_addresses(
+        resp = ec2_client.describe_addresses(
           public_ips: ["#{@public_ip}"],
           # allocation_ids: ["String", '...'],
         )
@@ -230,18 +230,18 @@ module Aws
         raise Error, "IP already associated with another interface" if resp['addresses'][0]['association_id'] != nil
 
         @allocation_id = resp['addresses'][0]['allocation_id']
-        resp = @api.associate_address(
+        resp = ec2_client.associate_address(
           allocation_id: "#{@allocation_id}",
           network_interface_id: "#{@network_interface_id}",
           private_ip_address: "#{@private_ip}",
           allow_reassociation: true,
         )
       else
-        resp = @api.allocate_address(domain: "vpc")
+        resp = ec2_client.allocate_address(domain: "vpc")
         @public_ip = resp['public_ip']
         @allocation_id = resp['allocation_id']
 
-        resp = @api.associate_address(
+        resp = ec2_client.associate_address(
           # instance_id: "#{@instance_id}",
           # public_ip: "#{@public_ip}",
           allocation_id: "#{@allocation_id}",

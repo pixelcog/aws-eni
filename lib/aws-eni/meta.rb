@@ -11,7 +11,7 @@ module Aws
       BASE = '/latest/meta-data/'
 
       # Custom exception classes
-      class Non200Response < RuntimeError; end
+      class BadResponse < RuntimeError; end
       class ConnectionFailed < RuntimeError; end
 
       # These are the errors we trap when attempting to talk to the instance
@@ -24,7 +24,7 @@ module Aws
         Errno::ENETUNREACH,
         SocketError,
         Timeout::Error,
-        Non200Response,
+        BadResponse,
       ]
 
       # Open connection and run a single GET request on the instance metadata
@@ -62,10 +62,13 @@ module Aws
       # endpoint and return the body of any 200 response.
       def self.http_get(connection, path)
         response = connection.request(Net::HTTP::Get.new(BASE + path))
-        if response.code.to_i == 200
+        case response.code.to_i
+        when 200
           response.body
+        when 404
+          nil
         else
-          raise Non200Response
+          raise BadResponse
         end
       end
     end

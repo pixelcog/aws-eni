@@ -9,13 +9,15 @@ begin
 
   # list command
   when 'list'
-    eni.list.each do |dev|
-      # print devices
-      print "#{dev['device']}:", "\n"
-      print "  #{dev['private_ip']}"
-      print "\n" if dev['public_ip'] == nil
-      print " => #{dev['public_ip']}", "\n" if dev['public_ip'] != nil
-      # print "MAC: ", dev['mac'], "\n"
+    eni.list(ARGV[1]).each do |interface|
+      puts "#{interface[:name]}:\tID #{interface[:interface_id]}  HWaddr #{interface[:hwaddr]}"
+      interface[:ip_assoc].each do |local_ip, public_ip|
+        if public_ip
+          puts "\t#{local_ip} => #{public_ip}"
+        else
+          puts "\t#{local_ip}"
+        end
+      end
     end
 
   # sync command
@@ -45,7 +47,8 @@ begin
     @assoc = eni.assoc(ARGV[1], ARGV[2])
     puts "associated #{@assoc['private_ip']} => #{@assoc['public_ip']}"
 
-
+  else
+    abort "Unknown command: #{ARGV[0]}"
   end
 
 

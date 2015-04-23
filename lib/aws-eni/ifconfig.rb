@@ -219,7 +219,7 @@ module Aws
             end
           end
           rules_to_add.each do |ip|
-            exec("rule add from #{ip} lookup #{route_table}")
+            exec("rule add from #{ip} lookup #{route_table}") unless dry_run
             changes += 1
           end
         end

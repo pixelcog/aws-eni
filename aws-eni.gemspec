@@ -5,7 +5,7 @@ require 'aws-eni/version'
 
 Gem::Specification.new do |spec|
   spec.name          = "aws-eni"
-  spec.version       = AWS::ENI::VERSION
+  spec.version       = Aws::ENI::VERSION
   spec.authors       = ["Mike Greiling"]
   spec.email         = ["mike@pixelcog.com"]
   spec.summary       = "Manage and sync local network config with AWS Elastic Network Interfaces"

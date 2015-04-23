@@ -1,5 +1,5 @@
 module Aws
-  class ENI
-    VERSION = "0.0.1"
+  module ENI
+    VERSION = "0.0.2"
   end
 end

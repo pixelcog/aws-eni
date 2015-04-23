@@ -2,40 +2,46 @@
 
 require 'aws-eni'
 
-eni = Aws::ENI.new
-
 begin
   case ARGV[0]
 
   # list command
   when 'list'
-    eni.list(ARGV[1]).each do |interface|
-      puts "#{interface[:name]}:\tID #{interface[:interface_id]}  HWaddr #{interface[:hwaddr]}"
-      interface[:ip_assoc].each do |local_ip, public_ip|
-        if public_ip
-          puts "\t#{local_ip} => #{public_ip}"
+    Aws::ENI.list(ARGV[1]).each do |interface|
+      puts "#{interface[:name]}:\t" +
+           "ID #{interface[:interface_id]}  " +
+           "HWaddr #{interface[:hwaddr]}  " +
+           "Status " + (interface[:enabled] ? "UP" : "DOWN")
+      interface[:local_ips].each do |local_ip|
+        if interface[:public_ips][local_ip]
+          puts "\t#{local_ip} => #{interface[:public_ips][local_ip]}"
         else
           puts "\t#{local_ip}"
         end
       end
     end
+    puts "\ninterface config is out of sync" if Aws::ENI.configure(nil, dry_run: true) > 0
 
   # sync command
-  when 'sync'
-    if eni.sync != 0
+  when 'config', 'configure'
+    if Aws::ENI.configure(ARGV[1]) != 0
       puts 'synchronized interface config'
     else
       puts 'network interface config already in sync'
     end
 
+  # sync command
+  when 'deconfig', 'deconfigure'
+    Aws::ENI.deconfigure(ARGV[1])
+
   # add command
   when 'add'
-    @add = eni.add(ARGV[1], ARGV[2])
+    @add = Aws::ENI.add(ARGV[1], ARGV[2])
     puts "added #{@add['device']} with private ip #{@add['private_ip']}"
 
   # remove command
   when 'remove'
-    @remove = eni.remove(ARGV[1], ARGV[2], ARGV[3])
+    @remove = Aws::ENI.remove(ARGV[1], ARGV[2], ARGV[3])
     if @remove['release'] == true
       puts "removed #{@remove['private_ip']} and dissociated #{remove['public_ip']} from #{@remove['device']}"
     else
@@ -44,7 +50,7 @@ begin
 
   # assoc command
   when 'associate'
-    @assoc = eni.assoc(ARGV[1], ARGV[2])
+    @assoc = Aws::ENI.assoc(ARGV[1], ARGV[2])
     puts "associated #{@assoc['private_ip']} => #{@assoc['public_ip']}"
 
   else

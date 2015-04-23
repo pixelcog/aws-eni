@@ -2,7 +2,7 @@ require 'time'
 require 'net/http'
 
 module Aws
-  class ENI
+  module ENI
     module Meta
 
       # EC2 instance meta-data connection settings

@@ -8,10 +8,10 @@ begin
   # list command
   when 'list'
     Aws::ENI.list(ARGV[1]).each do |interface|
-      puts "#{interface[:name]}:\t" +
-           "ID #{interface[:interface_id]}  " +
-           "HWaddr #{interface[:hwaddr]}  " +
-           "Status " + (interface[:enabled] ? "UP" : "DOWN")
+      print "#{interface[:name]}:"
+      print "\tID #{interface[:interface_id]}"
+      print "  HWaddr #{interface[:hwaddr]}"
+      print "  Status " << (interface[:enabled] ? "UP" : "DOWN") << "\n"
       interface[:local_ips].each do |local_ip|
         if interface[:public_ips][local_ip]
           puts "\t#{local_ip} => #{interface[:public_ips][local_ip]}"
@@ -60,5 +60,5 @@ begin
 
 # handle library exceptions
 rescue Aws::ENI::Error => e
-  abort "Error: " + e.message
+  abort "Error: " << e.message
 end

@@ -33,7 +33,7 @@ long_desc %{
   Use the optional filter argument to limit the listing to interfaces with a
   matching name, interface id, subnet id, or MAC address (default 'all').
 }
-arg 'filter | all (default)', :optional
+arg 'filter', :optional
 command [:list,:ls] do |c|
   c.action do |global,opts,args|
     args.delete('all')
@@ -62,7 +62,7 @@ long_desc %{
   Use the optional filter argument to limit this action to interfaces with a
   matching name, interface id, subnet id, or MAC address (default 'all').
 }
-arg 'filter | all (default)', :optional
+arg 'filter', :optional
 command [:config,:conf] do |c|
   c.action do |global,opts,args|
     args.delete('all')
@@ -83,7 +83,7 @@ long_desc %{
   Use the optional filter argument to limit this action to interfaces with a
   matching name, interface id, subnet id, or MAC address (default 'all').
 }
-arg 'filter | all (default)', :optional
+arg 'filter', :optional
 command [:deconfig,:deconf] do |c|
   c.action do |global,opts,args|
     args.delete('all')
@@ -95,10 +95,10 @@ desc 'Enable network interface'
 long_desc %{
   Enable one or more network interfaces (similar to 'ifup').
 
-  Use the optional filter argument to limit this action to interfaces with a
-  matching name, interface id, subnet id, or MAC address (default 'all').
+  Specify one name, interface id, subnet id, or MAC address to enable any
+  matching interfaces, or specify 'all' to enable all interfaces.
 }
-arg 'filter | all (default)', :optional
+arg 'filter'
 command [:enable,:up] do |c|
   c.action do |global,opts,args|
     args.delete('all')
@@ -110,14 +110,22 @@ desc 'Disable network interface'
 long_desc %{
   Disable one or more network interfaces (similar to 'ifdown').
 
-  Use the optional filter argument to limit this action to interfaces with a
-  matching name, interface id, subnet id, or MAC address (default 'all').
+  Specify one name, interface id, subnet id, or MAC address to disable any
+  matching interfaces, or specify 'all' to disable all interfaces.
+
+  eth0 cannot be disabled.
 }
-arg 'filter | all (default)', :optional
+arg 'filter'
 command [:disable,:down] do |c|
   c.action do |global,opts,args|
     args.delete('all')
-    Aws::ENI.IFconfig.filter(args.first).each(&:disable)
+    Aws::ENI.IFconfig.filter(args.first).each do |dev|
+      if dev.name == 'eth0'
+        warn 'skipping eth0'
+      else
+        dev.disable
+      end
+    end
   end
 end
 

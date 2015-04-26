@@ -102,7 +102,7 @@ arg 'filter'
 command [:enable,:up] do |c|
   c.action do |global,opts,args|
     args.delete('all')
-    Aws::ENI.IFconfig.filter(args.first).each(&:enable)
+    Aws::ENI::IFconfig.filter(args.first).each(&:enable)
   end
 end
 
@@ -119,7 +119,7 @@ arg 'filter'
 command [:disable,:down] do |c|
   c.action do |global,opts,args|
     args.delete('all')
-    Aws::ENI.IFconfig.filter(args.first).each do |dev|
+    Aws::ENI::IFconfig.filter(args.first).each do |dev|
       if dev.name == 'eth0'
         warn 'skipping eth0'
       else

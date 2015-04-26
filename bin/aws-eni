@@ -1,5 +1,7 @@
 #!/usr/bin/env ruby
 require 'gli'
+require 'resolv'
+require 'ipaddr'
 require 'aws-eni'
 
 include GLI::App
@@ -20,6 +22,57 @@ switch [:v,:verbose], negatable: false
 pre do |opt|
   Aws::ENI::IFconfig.verbose = opt[:verbose]
   true
+end
+
+# arg parser methods
+
+def local_ip?(ip)
+  IPAddr.new(Aws::ENI.environment[:vpc_cidr]) === IPAddr.new(ip)
+end
+
+def parse_args(args, *accept)
+  params = {}
+  args.each do |arg|
+    if arg =~ /^eth[0-9]+/ && accept.include?(:device_name)
+      help_now! "You may only specify one device name." if params[:device_name]
+      params[:device_name] = arg
+    elsif arg =~ /^eni-/ && accept.include?(:interface_id)
+      help_now! "You may only specify one interface id." if params[:interface_id]
+      params[:interface_id] = arg
+    elsif arg =~ /^subnet-/ && accept.include?(:subnet_id)
+      help_now! "You may only specify one subnet." if params[:subnet_id]
+      params[:subnet_id] = arg
+    elsif arg =~ /^sg-/ && accept.include?(:security_groups)
+      params[:security_groups] ||= []
+      params[:security_groups] << arg
+    elsif arg =~ /^eipalloc-/ && accept.include?(:allocation_id)
+      help_now! "You may only specify one allocation id" if params[:allocation_id]
+      params[:allocation_id] = arg
+    elsif arg =~ /^eipassoc-/ && accept.include?(:association_id)
+      help_now! "You may only specify one association id" if params[:association_id]
+      params[:association_id] = arg
+    elsif arg =~ Resolv::IPv4::Regex
+      if local_ip? arg
+        if accept.include?(:primary_ip)
+          help_now! "You may only specify one primary IP address." if params[:primary_ip]
+          params[:primary_ip] = arg
+        elsif accept.include?(:local_ip)
+          help_now! "You may only specify one local IP address." if params[:local_ip]
+          params[:local_ip] = arg
+        else
+          help_now! "Invalid IP address: #{arg}"
+        end
+      elsif accept.include?(:public_ip)
+        help_now! "You may only specify one public IP address." if params[:public_ip]
+        params[:public_ip] = arg
+      else
+        help_now! "Invalid IP address: #{arg}"
+      end
+    else
+      help_now! "Invalid argument: #{arg}"
+    end
+  end
+  params
 end
 
 # commands
@@ -126,6 +179,117 @@ command [:disable,:down] do |c|
         dev.disable
       end
     end
+  end
+end
+
+desc 'Create new network interface'
+long_desc %{
+  Create a new Elastic Network Interface with a given set of parameters.
+
+  Optional arguments include subnet id, security group ids, and a primary ip
+  address.
+
+  If no subnet id is provided (e.g. subnet-1a2b3c4d) the subnet for eth0 will
+  be used. If no security group is provided (e.g. sg-1a2b3c4d) the VPC default
+  security group will be used. If a private ip is provided, it must fall within
+  the subnet's CIDR block. Arguments can be provided in any order.
+}
+arg 'subnet', :optional
+arg 'security-groups', :optional
+arg 'ip-address', :optional
+command [:create] do |c|
+  c.action do |global,opts,args|
+    params = parse_args args, :subnet_id, :security_groups, :primary_ip
+    interface = Aws::ENI.create_interface(params)
+    puts "interface #{interface[:id]} created on #{interface[:subnet_id]}"
+  end
+end
+
+desc 'Attach network interface'
+long_desc %{
+  Attach an Elastic Network Interface to our instance.
+
+  If interface id provided (e.g. eni-1a2b3c4d), that interface will be attached,
+  otherwise a new interface will be created with the provided parameters which
+  may include a subnet id, security group ids, and a primary ip address.
+
+  If no subnet id is provided (e.g. subnet-1a2b3c4d) the subnet for eth0 will
+  be used. If no security group is provided (e.g. sg-1a2b3c4d) the VPC default
+  security group will be used. If a private ip is provided, it must fall within
+  the subnet's CIDR block. Arguments can be provided in any order.
+}
+arg 'interface-id', :optional
+arg 'subnet-id', :optional
+arg 'security-groups', :optional
+arg 'ip-address', :optional
+command [:attach] do |c|
+  c.desc "Refresh the interface configuration after attachment"
+  c.switch [:r,:c,:config], negatable: false
+
+  c.action do |global,opts,args|
+    if args.first =~ /^eni-/
+      raise ArgumentError, 'Too many arguments' if args.count > 1
+      id = args.first
+    else
+      params = parse_args args, :subnet_id, :security_groups, :primary_ip
+      interface = Aws::ENI.create_interface(params)
+      puts "interface #{interface[:id]} created on #{interface[:subnet_id]}"
+      id = interface[:id]
+    end
+    device = Aws::ENI.attach_interface(id, enable: opts[:config], configure: opts[:config])
+    puts "interface #{device[:id]} attached to #{device[:name]}"
+    puts "device #{device[:name]} enabled and configured" if opts[:config]
+  end
+end
+
+desc 'Detach network interface'
+long_desc %{
+  Detach an Elastic Network Interface from our instance.
+
+  You must provide the interface id (e.g. eni-1a2b3c4d) or the device name
+  (e.g. eth1) or both.
+
+  If no flag is present, the default action is to destroy the network interface
+  after detachment only if it was originally created by aws-eni.
+}
+arg 'interface-id OR device-name'
+command [:detach] do |c|
+  c.desc "Delete (or preserve) the unused ENI resource after dataching"
+  c.switch [:d,:delete], default_value: :not_provided # GLI behavior workaround
+
+  c.action do |global,opts,args|
+    params = parse_args args, :interface_id, :device_name
+    params[:delete] = opts[:delete] unless opts[:delete] == :not_provided
+    id = params[:interface_id] || params[:device_name]
+
+    device = Aws::ENI.detach_interface(id, params)
+    if device[:deleted]
+      puts "interface #{device[:id]} detached from #{device[:name]} and destroyed"
+    else
+      puts "interface #{device[:id]} detached from #{device[:name]}"
+    end
+  end
+end
+
+desc 'Clean unattached network interfaces'
+long_desc %{
+  Delete unused Elastic Network Interfaces based on provided criteria.
+
+  You may provide a specific interface id (e.g. eni-1a2b3c4d), a subnet id
+  (e.g. subnet-1a2b3c4d), or an availability zone from this region (e.g.
+  us-east-1a) to act as search criteria.
+
+  By default, this will only delete ENIs which were originally created with this
+  script.
+}
+arg 'filter', :optional
+command [:clean] do |c|
+  c.desc "Force deletion of all unattached interfaces which meet our criteria"
+  c.switch [:f,:force], negatable: false
+
+  c.action do |global,opts,args|
+    deleted = Aws::ENI.clean_interfaces(args.first, safe_mode: !opts[:force])
+    puts "#{deleted[:count]} interfaces deleted"
   end
 end
 

@@ -15,6 +15,7 @@ module Aws
           e[:availability_zone] = Meta.http_get(conn, 'placement/availability-zone')
           e[:region] = e[:availability_zone].sub(/(.*)[a-z]/,'\1')
           e[:vpc_id] = Meta.http_get(conn, "network/interfaces/macs/#{hwaddr}/vpc-id")
+          e[:vpc_cidr] = Meta.http_get(conn, "network/interfaces/macs/#{hwaddr}/vpc-ipv4-cidr-block")
         end
         unless e[:vpc_id]
           raise EnvironmentError, "Unable to detect VPC settings, library incompatible with EC2-Classic"

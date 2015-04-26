@@ -96,22 +96,46 @@ module Aws
     end
 
     # detach network interface
-    def detach(refresh=false)
-      self.refresh if refresh
-      resp = client.describe_network_interfaces(
-        filters: [{
-          name: "private-ip-address",
-          values: ["#{@private_ip}"]
+    def detach_interface(id, options = {})
+      interface = IFconfig[id]
+      raise InvalidParameterError, "Interface #{interface.name} does not exist" unless interface.exists?
+      if options[:name] && interface.name != options[:name]
+        raise InvalidParameterError, "Interface #{interface.interface_id} not found on #{options[:name]}"
+      end
+      if options[:device_number] && interface.device_number != options[:device_number].to_i
+        raise InvalidParameterError, "Interface #{interface.interface_id} not found at index #{options[:device_number]}"
+      end
+
+      description = client.describe_network_interfaces(filters: [{
+        name: 'attachment.instance-id',
+        values: [environment[:instance_id]]
+      },{
+        name: 'network-interface-id',
+        values: [interface.interface_id]
       }])
-      @network_interface_id = resp[:network_interfaces][0][:network_interface_id]
-      resp = client.describe_network_interfaces(network_interface_ids: ["#{@network_interface_id}"])
-      @device_index = resp[:network_interfaces][0][:attachment][:device_index]
-      @network_attachment_id = resp[:network_interfaces][0][:attachment][:attachment_id]
-      resp = client.detach_network_interface(
-        attachment_id: "#{@network_attachment_id}",
-        force: true,
+      description = description[:network_interfaces].first
+      raise UnknownInterfaceError, "Interface attachment could not be located" unless description
+
+      interface.disable
+      interface.deconfigure
+      client.detach_network_interface(
+        attachment_id: description[:attachment][:attachment_id],
+        force: true
       )
-      # puts "detached eth#{@device_index} with private ip #{@private_ip}"
+      deleted = false
+      created_by_us = description.tag_set.any? { |tag| tag.key == 'created by' && tag.value == owner_tag }
+      unless options[:delete] == false || options[:delete].nil? && !created_by_us
+        deleted = true
+        client.delete_network_interface(network_interface_id: description[:network_interface_id])
+      end
+      {
+        id:            description[:network_interface_id],
+        name:          "eth#{description[:attachment][:device_index]}",
+        device_number: description[:attachment][:device_index],
+        created_by_us: created_by_us,
+        deleted:       deleted,
+        api_response:  description
+      }
     end
 
     # delete network interface

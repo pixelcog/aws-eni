@@ -25,7 +25,7 @@ module Aws
     end
 
     def client
-      @client ||= Aws::EC2::Client.new(environment[:region])
+      @client ||= Aws::EC2::Client.new(region: environment[:region])
     end
 
     # return our internal model of this instance's network configuration on AWS

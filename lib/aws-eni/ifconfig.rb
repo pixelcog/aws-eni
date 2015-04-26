@@ -106,17 +106,19 @@ module Aws
 
       # Get our interface's MAC address
       def hwaddr
-        IO.read("/sys/class/net/#{name}/address").strip
-      rescue Errno::ENOENT
-        deconfigure
-        raise UnknownInterfaceError, "Unknown interface: #{name}"
+        begin
+          exists? && IO.read("/sys/class/net/#{name}/address").strip
+        rescue Errno::ENOENT
+        end.tap do |address|
+          raise UnknownInterfaceError, "Unknown interface: #{name}" unless address
+        end
       end
 
       # Verify device exists on our system
       def exists?
-        true if hwaddr
-      rescue UnknownInterfaceError
-        false
+        File.directory?("/sys/class/net/#{name}").tap do |exists|
+          deconfigure unless exists || @clean
+        end
       end
 
       # Validate and return basic interface metadata
@@ -233,6 +235,7 @@ module Aws
           end
         end
 
+        @clean = nil
         changes
       end
 
@@ -249,7 +252,7 @@ module Aws
           exec("route flush table #{route_table}")
           exec("route flush cache")
         end
-        true
+        @clean = true
       end
 
       # Add a secondary ip to this interface

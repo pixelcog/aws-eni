@@ -29,20 +29,20 @@ module Aws
     end
 
     # return our internal model of this instance's network configuration on AWS
-    def list(selector = nil)
-      IFconfig.filter(selector).map(&:to_h) if environment
+    def list(filter = nil)
+      IFconfig.filter(filter).map(&:to_h) if environment
     end
 
     # sync local machine's network interface config with the EC2 meta-data
     # pass dry_run option to check whether configuration is out of sync without
     # modifying it
-    def configure(selector = nil, options = {})
-      IFconfig.configure(selector, options) if environment
+    def configure(filter = nil, options = {})
+      IFconfig.configure(filter, options) if environment
     end
 
     # clear local machine's network interface config
-    def deconfigure(selector = nil)
-      IFconfig.deconfigure(selector) if environment
+    def deconfigure(filter = nil)
+      IFconfig.deconfigure(filter) if environment
     end
 
     # create network interface

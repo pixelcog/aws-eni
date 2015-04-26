@@ -2,6 +2,7 @@
 module Aws
   module ENI
     class Error < RuntimeError; end
+    class TimeoutError < Error; end
     class MissingParameterError < Error; end
     class InvalidParameterError < Error; end
     class UnknownInterfaceError < Error; end

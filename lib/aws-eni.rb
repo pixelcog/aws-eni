@@ -6,7 +6,7 @@ require 'aws-eni/ifconfig'
 
 module Aws
   module ENI
-    module_function
+    extend self
 
     def environment
       @environment ||= {}.tap do |e|
@@ -85,6 +85,8 @@ module Aws
       params[:device_index] = interface.device_number
 
       response = client.attach_network_interface(params)
+      attached = wait_for(10) { interface.exists? }
+      raise TimeoutError, "Timed out waiting for the interface to attach" unless attached
       interface.configure if options[:configure]
       interface.enable if options[:enable]
       {
@@ -125,8 +127,12 @@ module Aws
       deleted = false
       created_by_us = description.tag_set.any? { |tag| tag.key == 'created by' && tag.value == owner_tag }
       unless options[:delete] == false || options[:delete].nil? && !created_by_us
-        deleted = true
+        detached = wait_for(10, 0.3) do
+          !interface.exists? && interface_status(description[:network_interface_id]) == 'available'
+        end
+        raise TimeoutError, "Timed out waiting for the interface to detach" unless detached
         client.delete_network_interface(network_interface_id: description[:network_interface_id])
+        deleted = true
       end
       {
         id:            description[:network_interface_id],
@@ -318,5 +324,19 @@ module Aws
       end
     end
 
+    private
+
+    def interface_status(id)
+      resp = client.describe_network_interfaces(network_interface_ids: [id])
+      resp[:network_interfaces].first[:status] unless resp[:network_interfaces].empty?
+    end
+
+    def wait_for(timer = 5, interval = 0.1, &block)
+      until timer < 0 or block.call
+        timer -= interval
+        sleep interval
+      end
+      timer > 0
+    end
   end
 end

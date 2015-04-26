@@ -97,8 +97,8 @@ module Aws
 
     # detach network interface
     def detach_interface(id, options = {})
-      interface = IFconfig[id]
-      raise InvalidParameterError, "Interface #{interface.name} does not exist" unless interface.exists?
+      interface = IFconfig.filter(id).first
+      raise InvalidParameterError, "Interface #{interface.name} does not exist" unless interface && interface.exists?
       if options[:name] && interface.name != options[:name]
         raise InvalidParameterError, "Interface #{interface.interface_id} not found on #{options[:name]}"
       end

@@ -125,6 +125,7 @@ module Aws
         unless @meta_cache && hwaddr == @meta_cache[:hwaddr]
           dev_path = "network/interfaces/macs/#{hwaddr}"
           Meta.open_connection do |conn|
+            raise Meta::BadResponse unless Meta.http_get(conn, "#{dev_path}/")
             @meta_cache = {
               hwaddr: hwaddr,
               interface_id: Meta.http_get(conn, "#{dev_path}/interface-id"),

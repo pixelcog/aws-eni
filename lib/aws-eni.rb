@@ -138,16 +138,49 @@ module Aws
       }
     end
 
-    # delete network interface
-    def delete(refresh=false)
-      self.refresh if refresh
-      resp = client.describe_network_interfaces(network_interface_ids: ["#{@network_interface_id}"])
-      until resp[:network_interfaces][0][:status] == "available"
-        sleep 5
-        resp = client.describe_network_interfaces(network_interface_ids: ["#{@network_interface_id}"])
+    # delete unattached network interfaces
+    def clean_interfaces(filter = nil, options = {})
+      safe_mode = true unless options[:safe_mode] == false
+
+      filters = [
+        { name: 'vpc-id', values: [environment[:vpc_id]] },
+        { name: 'status', values: ['available'] }
+      ]
+      if filter
+        case filter
+        when /^eni-/
+          filters << { name: 'network-interface-id', values: [filter] }
+        when /^subnet-/
+          filters << { name: 'subnet-id', values: [filter] }
+        when /^#{environment[:region]}[a-z]$/
+          filters << { name: 'availability-zone', values: [filter] }
+        else
+          raise InvalidParameterError, "Unknown resource filter: #{filter}"
+        end
       end
-      resp = client.delete_network_interface(network_interface_id: "#{@network_interface_id}")
-      # puts "removed interface eth#{@device_index} with id #{@network_interface_id}"
+      if safe_mode
+        filters << { name: 'tag:created by', values: [owner_tag] }
+      end
+
+      descriptions = client.describe_network_interfaces(filters: filters)
+      interfaces = descriptions[:network_interfaces].select do |interface|
+        skip = safe_mode && interface.tag_set.any? do |tag|
+          begin
+            tag.key == 'created on' && Time.now - Time.parse(tag.value) < 60
+          rescue ArgumentError
+            false
+          end
+        end
+        unless skip
+          client.delete_network_interface(network_interface_id: interface[:network_interface_id])
+          true
+        end
+      end
+      {
+        count:        interfaces.count,
+        deleted:      interfaces.map { |eni| eni[:network_interface_id] },
+        api_response: interfaces
+      }
     end
 
     # add new private ip using the AWS api and add it to our local ip config

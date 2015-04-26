@@ -14,6 +14,7 @@ module Aws
         # Array-like accessor to automatically instantiate our class
         def [](index)
           index = $1.to_i if index.to_s =~ /^(?:eth)?([0-9]+)$/
+          index ||= next_available_index
           @instance_cache ||= []
           @instance_cache[index] ||= new("eth#{index}", false)
         end
@@ -27,6 +28,13 @@ module Aws
         # Return array of available ethernet interfaces
         def existing
           Dir.entries("/sys/class/net/").grep(/^eth[0-9]+$/){ |name| self[name] }
+        end
+
+        # Return the next unused device index
+        def next_available_index
+          for index in 0..32 do
+            break index unless self[index].exists?
+          end
         end
 
         # Iterate over available ethernet interfaces (required for Enumerable)

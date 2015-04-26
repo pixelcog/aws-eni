@@ -75,20 +75,24 @@ module Aws
     end
 
     # attach network interface
-    def attach(refresh=false)
-      self.refresh if refresh
-      @instance_id = Meta.get("instance-id")
-      n = 0; @new_macs_arr = Array.new
-      @macs_arr.each {|mac| @new_macs_arr.push(Meta.get("network/interfaces/macs/#{mac}/device-number"))}
-      @device_number = @new_macs_arr.sort.last
-      @device_index = @device_number.to_i + 1
-      resp = client.attach_network_interface(
-        network_interface_id: "#{@network_interface_id}",
-        instance_id: "#{@instance_id}",
-        device_index: "#{@device_index}",
-      )
-      resp = client.describe_network_interfaces(network_interface_ids: ["#{@network_interface_id}"])
-      @private_ip = resp[:network_interfaces][0][:private_ip_address]
+    def attach_interface(id, options = {})
+      interface = IFconfig[options[:device_number] || options[:name]]
+      raise InvalidParameterError, "Interface #{interface.name} is already in use" if interface.exists?
+
+      params = {}
+      params[:network_interface_id] = id
+      params[:instance_id] = environment[:instance_id]
+      params[:device_index] = interface.device_number
+
+      response = client.attach_network_interface(params)
+      interface.configure if options[:configure]
+      interface.enable if options[:enable]
+      {
+        id:           interface.interface_id,
+        name:         interface.name,
+        configured:   options[:configure],
+        api_response: response
+      }
     end
 
     # detach network interface

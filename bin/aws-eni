@@ -225,7 +225,7 @@ arg 'subnet-id', :optional
 arg 'security-groups', :optional
 arg 'ip-address', :optional
 command [:attach] do |c|
-  c.desc "Refresh the interface configuration after attachment"
+  c.desc 'Refresh the interface configuration after attachment'
   c.switch [:r,:c,:config], negatable: false
 
   c.action do |global,opts,args|
@@ -256,7 +256,7 @@ long_desc %{
 }
 arg 'interface-id OR device-name'
 command [:detach] do |c|
-  c.desc "Delete (or preserve) the unused ENI resource after dataching"
+  c.desc 'Delete (or preserve) the unused ENI resource after dataching'
   c.switch [:d,:delete], default_value: :not_provided # GLI behavior workaround
 
   c.action do |global,opts,args|
@@ -286,7 +286,7 @@ long_desc %{
 }
 arg 'filter', :optional
 command [:clean] do |c|
-  c.desc "Force deletion of all unattached interfaces which meet our criteria"
+  c.desc 'Force deletion of all unattached interfaces which meet our criteria'
   c.switch [:f,:force], negatable: false
 
   c.action do |global,opts,args|
@@ -299,7 +299,7 @@ end
 
 on_error do |exception|
   if Aws::ENI::PermissionError === exception
-    warn "error: This action requires super-user privileges (try sudo)"
+    warn 'error: This action requires super-user privileges (try sudo)'
     false
   else
     true

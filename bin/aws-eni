@@ -10,6 +10,7 @@ program_desc 'Manage and sync local network config with AWS Elastic Network Inte
 
 version Aws::ENI::VERSION
 
+autocomplete_commands true
 subcommand_option_handling :normal
 arguments :strict
 sort_help :manually
@@ -116,7 +117,7 @@ long_desc %{
   matching name, interface id, subnet id, or MAC address (default 'all').
 }
 arg 'filter', :optional
-command [:config,:conf] do |c|
+command [:config] do |c|
   c.action do |global,opts,args|
     args.delete('all')
     if Aws::ENI.configure(args.first) != 0
@@ -137,7 +138,7 @@ long_desc %{
   matching name, interface id, subnet id, or MAC address (default 'all').
 }
 arg 'filter', :optional
-command [:deconfig,:deconf] do |c|
+command [:deconfig] do |c|
   c.action do |global,opts,args|
     args.delete('all')
     Aws::ENI.deconfigure(args.first)
@@ -355,7 +356,7 @@ arg 'public-ip', :optional
 arg 'allocation-id', :optional
 arg 'interface-id', :optional
 arg 'device-name', :optional
-command [:associate,:assoc] do |c|
+command [:associate] do |c|
   c.action do |global,opts,args|
     params = parse_args args, :private_ip, :public_ip, :allocation_id, :interface_id, :device_name
     assoc = Aws::ENI.associate_elastic_ip(params[:private_ip], params)
@@ -371,7 +372,7 @@ long_desc %{
 arg 'private-ip OR public-ip OR allocation-id'
 arg 'interface-id', :optional
 arg 'device-name', :optional
-command [:dissociate,:dissoc] do |c|
+command [:dissociate] do |c|
   c.desc 'Release the associated public ip address'
   c.switch [:r,:release], negatable: false
 
@@ -391,7 +392,7 @@ desc 'Allocate a new Elastic IP address'
 long_desc %{
   Allocate a new Elastic IP address for use
 }
-command [:allocate,:alloc] do |c|
+command [:allocate] do |c|
   c.action do |global,opts,args|
     alloc = Aws::ENI.allocate_elastic_ip
     puts "EIP #{alloc[:public_ip]} allocated as #{alloc[:allocation_id]}"
@@ -406,7 +407,7 @@ long_desc %{
 }
 arg 'ip-address', :optional
 arg 'allocation-id', :optional
-command [:release,:rel] do |c|
+command [:release] do |c|
   c.action do |global,opts,args|
     params = parse_args args, :public_ip, :allocation_id
     eip = params[:public_ip] || params[:allocation_id]

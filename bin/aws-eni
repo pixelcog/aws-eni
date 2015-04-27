@@ -12,7 +12,7 @@ version Aws::ENI::VERSION
 
 autocomplete_commands true
 subcommand_option_handling :normal
-arguments :strict
+arguments :loose
 sort_help :manually
 
 # global options
@@ -90,6 +90,7 @@ long_desc %{
 arg 'filter', :optional
 command [:list,:ls] do |c|
   c.action do |global,opts,args|
+    help_now! "Too many arguments" if args.count > 1
     args.delete('all')
     Aws::ENI.list(args.first).each do |interface|
       print "#{interface[:name]}:"
@@ -119,6 +120,7 @@ long_desc %{
 arg 'filter', :optional
 command [:config] do |c|
   c.action do |global,opts,args|
+    help_now! "Too many arguments" if args.count > 1
     args.delete('all')
     if Aws::ENI.configure(args.first) != 0
       puts 'synchronized interface config'
@@ -140,6 +142,7 @@ long_desc %{
 arg 'filter', :optional
 command [:deconfig] do |c|
   c.action do |global,opts,args|
+    help_now! "Too many arguments" if args.count > 1
     args.delete('all')
     Aws::ENI.deconfigure(args.first)
   end
@@ -155,6 +158,7 @@ long_desc %{
 arg 'filter'
 command [:enable,:up] do |c|
   c.action do |global,opts,args|
+    help_now! "Incorrect number of arguments" unless args.count.between?(0,1)
     args.delete('all')
     Aws::ENI::IFconfig.filter(args.first).each(&:enable)
     puts "interfaces enabled"
@@ -173,6 +177,7 @@ long_desc %{
 arg 'filter'
 command [:disable,:down] do |c|
   c.action do |global,opts,args|
+    help_now! "Incorrect number of arguments" unless args.count.between?(0,1)
     args.delete('all')
     Aws::ENI::IFconfig.filter(args.first).each do |dev|
       if dev.name == 'eth0'
@@ -231,7 +236,7 @@ command [:attach] do |c|
 
   c.action do |global,opts,args|
     if args.first =~ /^eni-/
-      raise ArgumentError, 'Too many arguments' if args.count > 1
+      help_now! 'Too many arguments' if args.count > 1
       id = args.first
     else
       params = parse_args args, :subnet_id, :security_groups, :primary_ip
@@ -261,6 +266,7 @@ command [:detach] do |c|
   c.switch [:d,:delete], default_value: :not_provided # GLI behavior workaround
 
   c.action do |global,opts,args|
+    help_now! "Missing argument" if args.empty?
     params = parse_args args, :interface_id, :device_name
     params[:delete] = opts[:delete] unless opts[:delete] == :not_provided
     id = params[:interface_id] || params[:device_name]
@@ -291,6 +297,7 @@ command [:clean] do |c|
   c.switch [:f,:force], negatable: false
 
   c.action do |global,opts,args|
+    help_now! "Too many arguments" if args.count > 1
     deleted = Aws::ENI.clean_interfaces(args.first, safe_mode: !opts[:force])
     puts "#{deleted[:count]} interfaces deleted"
   end
@@ -307,6 +314,7 @@ arg 'ip-address', :optional
 arg 'interface-id OR device-name'
 command [:assign] do |c|
   c.action do |global,opts,args|
+    help_now! "Missing argument" if args.empty?
     params = parse_args args, :interface_id, :device_name, :private_ip
     device = params[:interface_id] || params[:device_name]
     assignment = Aws::ENI.assign_secondary_ip(device, params)
@@ -329,6 +337,7 @@ command [:unassign] do |c|
   c.switch [:r,:release], negatable: false
 
   c.action do |global,opts,args|
+    help_now! "Missing argument" if args.empty?
     params = parse_args args, :interface_id, :device_name, :private_ip
     params[:release] = opts[:release]
     unassign = Aws::ENI.unassign_secondary_ip(params[:private_ip], params)
@@ -358,6 +367,7 @@ arg 'interface-id', :optional
 arg 'device-name', :optional
 command [:associate] do |c|
   c.action do |global,opts,args|
+    help_now! "Missing argument" if args.empty?
     params = parse_args args, :private_ip, :public_ip, :allocation_id, :interface_id, :device_name
     assoc = Aws::ENI.associate_elastic_ip(params[:private_ip], params)
     puts "EIP #{assoc[:public_ip]} (#{assoc[:allocation_id]}) associated with #{assoc[:private_ip]} on #{assoc[:device_name]} (#{assoc[:interface_id]})"
@@ -377,6 +387,7 @@ command [:dissociate] do |c|
   c.switch [:r,:release], negatable: false
 
   c.action do |global,opts,args|
+    help_now! "Missing argument" if args.empty?
     params = parse_args args, :private_ip, :public_ip, :allocation_id, :association_id, :interface_id, :device_name
     ip = params[:private_ip] || params[:public_ip] || params[:association_id] || params[:allocation_id]
     dissoc = Aws::ENI.dissociate_elastic_ip(ip, params)
@@ -405,10 +416,10 @@ long_desc %{
   allication, will release only that EIP, otherwise will clean all unassigned
   EIPs.
 }
-arg 'ip-address', :optional
-arg 'allocation-id', :optional
+arg 'ip-address OR allocation-id'
 command [:release] do |c|
   c.action do |global,opts,args|
+    help_now! "Missing argument" if args.empty?
     params = parse_args args, :public_ip, :allocation_id
     eip = params[:public_ip] || params[:allocation_id]
     release = Aws::ENI.release_elastic_ip(eip, params)

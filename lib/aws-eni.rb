@@ -1,5 +1,6 @@
 require 'time'
 require 'aws-sdk'
+require 'aws-eni/version'
 require 'aws-eni/errors'
 require 'aws-eni/meta'
 require 'aws-eni/ifconfig'
@@ -190,138 +191,73 @@ module Aws
     end
 
     # add new private ip using the AWS api and add it to our local ip config
-    def add(private_ip=nil, interface='eth0')
-      begin
-        # use AWS api to add a private ip address to the given interface.
-        # if unspecified, let AWS auto-assign the ip.
-        self.create
-        self.attach
+    def assign_secondary_ip(interface, options = {})
+      raise NoMethodError, "assign_secondary_ip not yet implemented"
+      {
+        private_ip:   '0.0.0.0',
+        device_name:  'eth0',
+        interface_id: 'eni-1a2b3c4d'
+      }
+    end
 
-        # add the new ip to the local config with `ip addr add ...` and use
-        # `ip rule ...` or `ip route ...` if necessary
-
-        sleep 3 while `ip ad sh dev eth#{@device_index} 2>&1`.include? 'does not exist'
-        `sudo dhclient eth#{@device_index}`
-        # `sudo ip ad add #{@private_ip} dev eth#{@device_index}`
-        # `sudo ip link set dev eth#{@device_index} up`
-
-        # throw named exception if the private ip limit is reached, if the ip
-        # specified is already in use, or for any similar error
-      rescue
-        raise Error, "The private ip limit is reached"
-      else
-        if @private_ip == nil or @device_index == nil
-          raise Error, "No data received from lib while adding interface"
-        else
-          # return the new ip and device
-          return { "private_ip" => @private_ip, "device" => "eth#{@device_index}" }
-        end
-      end
+    # remove a private ip using the AWS api and remove it from local config
+    def unassign_secondary_ip(private_ip, options = {})
+      raise NoMethodError, "unassign_secondary_ip not yet implemented"
+      {
+        private_ip:     '0.0.0.0',
+        device_name:    'eth0',
+        interface_id:   'eni-1a2b3c4d',
+        public_ip:      '0.0.0.0',
+        allocation_id:  'eipalloc-1a2b3c4d',
+        association_id: 'eipassoc-1a2b3c4d',
+        released:       true
+      }
     end
 
     # associate a private ip with an elastic ip through the AWS api
-    def assoc(private_ip, public_ip=nil)
-      self.refresh if refresh
-
-      # check that the private ip exists within our internal model and infer the
-      # interface from that, throw exception otherwise
-      @data_arr.each { |dev| @private_ip_exists = true if private_ip == dev['private_ip'] }
-      raise Error, "Specified private ip does not exists" if @private_ip_exists == nil
-
-      @private_ip = private_ip
-      resp = client.describe_network_interfaces(
-        filters: [{
-          name: "private-ip-address",
-          values: ["#{@private_ip}"]
-      }])
-      @network_interface_id = resp[:network_interfaces][0][:network_interface_id]
-
-      # if the public_ip parameter is specified use the AWS api to find an
-      # existing "elastic ip" in this account and throw exception if it does not
-      # exist or is otherwise unavailable (if already associated with another
-      # instance or interface). if parameter not provided, create a new elastic
-      # ip using the AWS api
-
-      # associate this EIP with the provided private ip and the eni device we
-      # inferred from it using the AWS api
-
-      if public_ip != nil
-        @public_ip = public_ip
-        resp = client.describe_addresses(
-          public_ips: ["#{@public_ip}"],
-          # allocation_ids: ["String", '...'],
-        )
-
-        raise Error, "IP does not exists" if resp['addresses'][0]['public_ip'] != @public_ip
-        raise Error, "IP already associated with another interface" if resp['addresses'][0]['association_id'] != nil
-
-        @allocation_id = resp['addresses'][0]['allocation_id']
-        resp = client.associate_address(
-          allocation_id: "#{@allocation_id}",
-          network_interface_id: "#{@network_interface_id}",
-          private_ip_address: "#{@private_ip}",
-          allow_reassociation: true,
-        )
-      else
-        resp = client.allocate_address(domain: "vpc")
-        @public_ip = resp['public_ip']
-        @allocation_id = resp['allocation_id']
-
-        resp = client.associate_address(
-          # instance_id: "#{@instance_id}",
-          # public_ip: "#{@public_ip}",
-          allocation_id: "#{@allocation_id}",
-          network_interface_id: "#{@network_interface_id}",
-          private_ip_address: "#{@private_ip}",
-          allow_reassociation: true,
-        )
-        @association_id = resp['association_id']
-      end
-
-      # return the public ip
-      return { "private_ip" => @private_ip, "public_ip" => @public_ip }
+    def associate_elastic_ip(private_ip, options = {})
+      raise NoMethodError, "associate_elastic_ip not yet implemented"
+      {
+        private_ip:     '0.0.0.0',
+        device_name:    'eth0',
+        interface_id:   'eni-1a2b3c4d',
+        public_ip:      '0.0.0.0',
+        allocation_id:  'eipalloc-1a2b3c4d',
+        association_id: 'eipassoc-1a2b3c4d'
+      }
     end
 
     # dissociate a public ip from a private ip through the AWS api and
     # optionally release the public ip
-    def dissoc(private_ip=nil, public_ip=nil, release=true)
-
-      # either private_ip or public_ip must be specified. if only one is
-      # specified use internal model to infer the other. if not in our model,
-      # throw an exception. if both are provided but are not associated in our
-      # model, throw an exception.
-
-      # use AWS api to dissociate the public ip from the private ip.
-      # if release is truthy, remove the elastic ip after dissociating it.
-
-      # return true
+    def dissociate_elastic_ip(ip, options = {})
+      raise NoMethodError, "dissociate_elastic_ip not yet implemented"
+      {
+        private_ip:     '0.0.0.0',
+        device_name:    'eth0',
+        interface_id:   'eni-1a2b3c4d',
+        public_ip:      '0.0.0.0',
+        allocation_id:  'eipalloc-1a2b3c4d',
+        association_id: 'eipassoc-1a2b3c4d',
+        released:       true
+      }
     end
 
-    # remove a private ip using the AWS api and remove it from local config also
-    def remove(private_ip, interface=nil, release=true)
-      begin
-        @private_ip = private_ip
-        self.detach
-        self.delete
-        # if interface not provided, infer it from the private ip. if it is
-        # provided check that it corresponds to our private ip or raise an
-        # exception. this is merely a safeguard
+    # allocate a new elastic ip address
+    def allocate_elastic_ip
+      raise NoMethodError, "allocate_elastic_ip not yet implemented"
+      {
+        public_ip:     '0.0.0.0',
+        allocation_id: 'eipalloc-1a2b3c4d'
+      }
+    end
 
-        # if the private ip has an associated EIP, call dissoc and pass in the
-        # provided release parameter
-
-        # remove the private ip from the local machine's config and routing tables
-        # before using the AWS api to remove the private ip from our ENI.
-
-      rescue
-        raise Error, ""
-      else
-        if @private_ip == nil or @device_index == nil
-          raise Error, "No data received from lib while adding interface"
-        else
-          return { "device" => "eth#{@device_index}", "private_ip" => @private_ip, "public_ip" => @public_ip, "release" => release }
-        end
-      end
+    # release the specified elastic ip address
+    def release_elastic_ip(ip, options = {})
+      raise NoMethodError, "release_elastic_ip not yet implemented"
+      {
+        public_ip:     '0.0.0.0',
+        allocation_id: 'eipalloc-1a2b3c4d'
+      }
     end
 
     private

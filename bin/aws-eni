@@ -56,9 +56,9 @@ def parse_args(args, *accept)
         if accept.include?(:primary_ip)
           help_now! "You may only specify one primary IP address." if params[:primary_ip]
           params[:primary_ip] = arg
-        elsif accept.include?(:local_ip)
-          help_now! "You may only specify one local IP address." if params[:local_ip]
-          params[:local_ip] = arg
+        elsif accept.include?(:private_ip)
+          help_now! "You may only specify one private IP address." if params[:private_ip]
+          params[:private_ip] = arg
         else
           help_now! "Invalid IP address: #{arg}"
         end
@@ -292,6 +292,126 @@ command [:clean] do |c|
   c.action do |global,opts,args|
     deleted = Aws::ENI.clean_interfaces(args.first, safe_mode: !opts[:force])
     puts "#{deleted[:count]} interfaces deleted"
+  end
+end
+
+desc 'Assign a new secondary private ip address'
+long_desc %{
+  Assign an additional private ip address to a given interface.
+
+  You may optionally specify a private ip in the interface's subnet CIDR range
+  to assign, otherwise one will be generated automatically.
+}
+arg 'ip-address', :optional
+arg 'interface-id OR device-name'
+command [:assign] do |c|
+  c.action do |global,opts,args|
+    params = parse_args args, :interface_id, :device_name, :private_ip
+    device = params[:interface_id] || params[:device_name]
+    assignment = Aws::ENI.assign_secondary_ip(device, params)
+    puts "IP #{assignment[:private_ip]} assigned to #{assignment[:device_name]} (#{assignment[:interface_id]})"
+  end
+end
+
+desc 'Unassign a secondary private ip address'
+long_desc %{
+  Remove a private ip address from a given interface.  Any associated public ip
+  address will be dissociated first and optionally released.
+
+  If no interface is specified, it will be inferred by the ip address.
+}
+arg 'ip-address'
+arg 'interface-id', :optional
+arg 'device-name', :optional
+command [:unassign] do |c|
+  c.desc 'Release any associated public ip address'
+  c.switch [:r,:release], negatable: false
+
+  c.action do |global,opts,args|
+    params = parse_args args, :interface_id, :device_name, :private_ip
+    params[:release] = opts[:release]
+    unassign = Aws::ENI.unassign_secondary_ip(params[:private_ip], params)
+    if unassign[:released]
+      puts "EIP #{unassign[:public_ip]} (#{unassign[:allocation_id]}) dissociated from #{unassign[:private_ip]} and released"
+    elsif unassign[:public_ip]
+      puts "EIP #{unassign[:public_ip]} (#{unassign[:allocation_id]}) dissociated from #{unassign[:private_ip]}"
+    end
+    puts "IP #{unassign[:private_ip]} removed from #{unassign[:device_name]} (#{unassign[:interface_id]})"
+  end
+end
+
+desc 'Associate a public ip address with a private ip address'
+long_desc %{
+  Associate a private ip address with a new or existing public ip address.
+
+  If no public ip or allocation id is provided, a new Elastic IP Address will be
+  allocated and used.
+
+  If no interface id or device name provided, it will be inferred from the ip
+  address.
+}
+arg 'private-ip'
+arg 'public-ip', :optional
+arg 'allocation-id', :optional
+arg 'interface-id', :optional
+arg 'device-name', :optional
+command [:associate,:assoc] do |c|
+  c.action do |global,opts,args|
+    params = parse_args args, :private_ip, :public_ip, :allocation_id, :interface_id, :device_name
+    assoc = Aws::ENI.associate_elastic_ip(params[:private_ip], params)
+    puts "EIP #{assoc[:public_ip]} (#{assoc[:allocation_id]}) associated with #{assoc[:private_ip]} on #{assoc[:device_name]} (#{assoc[:interface_id]})"
+  end
+end
+
+desc 'Dissociate a public ip address from a private ip address'
+long_desc %{
+  Remove an association between a given public ip address or private ip address
+  and their counterpart.  The public ip address is then optionally released.
+}
+arg 'private-ip OR public-ip OR allocation-id'
+arg 'interface-id', :optional
+arg 'device-name', :optional
+command [:dissociate,:dissoc] do |c|
+  c.desc 'Release the associated public ip address'
+  c.switch [:r,:release], negatable: false
+
+  c.action do |global,opts,args|
+    params = parse_args args, :private_ip, :public_ip, :allocation_id, :association_id, :interface_id, :device_name
+    ip = params[:private_ip] || params[:public_ip] || params[:association_id] || params[:allocation_id]
+    dissoc = Aws::ENI.dissociate_elastic_ip(ip, params)
+    if dissoc[:released]
+      puts "EIP #{dissoc[:public_ip]} (#{dissoc[:allocation_id]}) dissociated from #{dissoc[:private_ip]} on #{dissoc[:device_name]} (#{dissoc[:interface_id]}) and released"
+    else
+      puts "EIP #{dissoc[:public_ip]} (#{dissoc[:allocation_id]}) dissociated from #{dissoc[:private_ip]} on #{dissoc[:device_name]} (#{dissoc[:interface_id]})"
+    end
+  end
+end
+
+desc 'Allocate a new Elastic IP address'
+long_desc %{
+  Allocate a new Elastic IP address for use
+}
+command [:allocate,:alloc] do |c|
+  c.action do |global,opts,args|
+    alloc = Aws::ENI.allocate_elastic_ip
+    puts "EIP #{alloc[:public_ip]} allocated as #{alloc[:allocation_id]}"
+  end
+end
+
+desc 'Release one or more unassigned Elastic IP addresses'
+long_desc %{
+  Release one or more unassigned Elastic IP addresses.  If ip address or
+  allication, will release only that EIP, otherwise will clean all unassigned
+  EIPs.
+}
+arg 'ip-address', :optional
+arg 'allocation-id', :optional
+command [:release,:rel] do |c|
+  c.action do |global,opts,args|
+    params = parse_args args, :public_ip, :allocation_id
+    eip = params[:public_ip] || params[:allocation_id]
+    release = Aws::ENI.release_elastic_ip(eip, params)
+    puts "EIP #{release[:public_ip]} (#{release[:allocation_id]}) released"
   end
 end
 

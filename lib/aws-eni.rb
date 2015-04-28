@@ -1,4 +1,5 @@
 require 'time'
+require 'resolv'
 require 'aws-sdk'
 require 'aws-eni/version'
 require 'aws-eni/errors'
@@ -260,19 +261,33 @@ module Aws
 
     # allocate a new elastic ip address
     def allocate_elastic_ip
-      raise NoMethodError, "allocate_elastic_ip not yet implemented"
+      eip = client.allocate_address(domain: 'vpc')
       {
-        public_ip:     '0.0.0.0',
-        allocation_id: 'eipalloc-1a2b3c4d'
+        public_ip:     eip[:public_ip],
+        allocation_id: eip[:allocation_id]
       }
     end
 
     # release the specified elastic ip address
-    def release_elastic_ip(ip, options = {})
-      raise NoMethodError, "release_elastic_ip not yet implemented"
+    def release_elastic_ip(ip)
+      filter_by = ip =~ Resolv::IPv4::Regex ? 'public-ip' : 'allocation-id'
+
+      eips = client.describe_addresses(filters: [
+        { name: 'domain', values: ['vpc'] },
+        { name: filter_by, values: [ip] }
+      ])
+      eip = eips[:addresses].first
+
+      if eip.nil?
+        raise InvalidParameterError, "No Elastic IP found matching: #{ip}"
+      elsif eip[:association_id]
+        raise AWSPermissionError, "Elastic IP #{eip[:public_ip]} (#{eip[:allocation_id]}) is currently in use"
+      end
+
+      client.release_address(allocation_id: eip[:allocation_id])
       {
-        public_ip:     '0.0.0.0',
-        allocation_id: 'eipalloc-1a2b3c4d'
+        public_ip:     eip[:public_ip],
+        allocation_id: eip[:allocation_id]
       }
     end
 

@@ -427,19 +427,19 @@ command [:allocate] do |c|
   end
 end
 
-desc 'Release one or more unassigned Elastic IP addresses'
+desc 'Release unassigned Elastic IP addresses'
 long_desc %{
-  Release one or more unassigned Elastic IP addresses.  If IP address or
-  allication, will release only that EIP, otherwise will clean all unassigned
-  EIPs.
+  Release one unassigned Elastic IP addresses identified by its public IP or its
+  allocation ID
 }
 arg 'ip-address OR allocation-id'
 command [:release] do |c|
   c.action do |global,opts,args|
     help_now! "Missing argument" if args.empty?
+    help_now! "Too many arguments" if args.count > 1
     params = parse_args args, :public_ip, :allocation_id
     eip = params[:public_ip] || params[:allocation_id]
-    release = Aws::ENI.release_elastic_ip(eip, params)
+    release = Aws::ENI.release_elastic_ip(eip)
     puts "EIP #{release[:public_ip]} (#{release[:allocation_id]}) released"
   end
 end

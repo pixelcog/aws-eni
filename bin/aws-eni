@@ -280,7 +280,7 @@ command [:detach] do |c|
 
     device = Aws::ENI.detach_interface(id, params)
     if device[:deleted]
-      puts "interface #{device[:id]} detached from #{device[:name]} and destroyed"
+      puts "interface #{device[:id]} detached from #{device[:name]} and deleted"
     else
       puts "interface #{device[:id]} detached from #{device[:name]}"
     end

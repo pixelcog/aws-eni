@@ -323,6 +323,12 @@ module Aws
         create_tags: {
           resources: ['eni-abcd1234'],
           tags: []
+        },
+        describe_addresses: nil,
+        allocate_address: nil,
+        release_address: {
+          dry_run: true,
+          allocation_id: 'eipalloc-no_exist'
         }
       }
       test_methods.each do |method, params|
@@ -333,6 +339,8 @@ module Aws
           raise Error, "Unexpected behavior while testing AWS API access"
         rescue Aws::EC2::Errors::DryRunOperation
           # success
+        rescue Aws::EC2::Errors::InvalidAllocationIDNotFound
+          # release_address does not properly support dry_run
         rescue Aws::EC2::Errors::UnauthorizedOperation
           return false
         end

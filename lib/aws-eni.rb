@@ -29,7 +29,12 @@ module Aws
 
     def owner_tag(new_owner = nil)
       @owner_tag = new_owner.to_s if new_owner
-      @owner_tag || 'aws-eni script'
+      @owner_tag ||= 'aws-eni script'
+    end
+
+    def timeout(new_default = nil)
+      @timeout = new_default.to_i if new_default
+      @timeout ||= 30
     end
 
     def client
@@ -90,8 +95,10 @@ module Aws
       params[:device_index] = interface.device_number
 
       response = client.attach_network_interface(params)
-      attached = wait_for(10) { interface.exists? }
-      raise TimeoutError, "Timed out waiting for the interface to attach" unless attached
+
+      wait_for 'the interface to attach', rescue: ConnectionFailed do
+        interface.exists? && interface_status(interface.interface_id) == 'in-use'
+      end
       interface.configure if do_config
       interface.enable if do_enable
       {
@@ -129,22 +136,21 @@ module Aws
         attachment_id: description[:attachment][:attachment_id],
         force: true
       )
-      deleted = false
       created_by_us = description.tag_set.any? { |tag| tag.key == 'created by' && tag.value == owner_tag }
-      unless options[:delete] == false || options[:delete].nil? && !created_by_us
-        detached = wait_for(10, 0.3) do
+      do_delete = options[:delete] || options[:delete].nil? && created_by_us
+
+      if options[:block] || do_delete
+        wait_for 'the interface to detach', interval: 0.3 do
           !interface.exists? && interface_status(description[:network_interface_id]) == 'available'
         end
-        raise TimeoutError, "Timed out waiting for the interface to detach" unless detached
-        client.delete_network_interface(network_interface_id: description[:network_interface_id])
-        deleted = true
       end
+      client.delete_network_interface(network_interface_id: description[:network_interface_id]) if do_delete
       {
         id:            description[:network_interface_id],
         name:          "eth#{description[:attachment][:device_index]}",
         device_number: description[:attachment][:device_index],
         created_by_us: created_by_us,
-        deleted:       deleted,
+        deleted:       do_delete,
         api_response:  description
       }
     end
@@ -324,12 +330,21 @@ module Aws
       resp[:network_interfaces].first[:status] unless resp[:network_interfaces].empty?
     end
 
-    def wait_for(timer = 5, interval = 0.1, &block)
-      until timer < 0 or block.call
-        timer -= interval
+    def wait_for(task, options = {}, &block)
+      errors = [*options[:rescue]]
+      timeout = options[:timeout] || self.timeout
+      interval = options[:interval] || 0.1
+
+      until timeout < 0
+        begin
+          break if block.call
+        rescue Exception => e
+          raise unless errors.include?(e)
+        end
         sleep interval
+        timeout -= interval
       end
-      timer > 0
+      raise TimeoutError, "Timed out waiting for #{task}" unless timeout > 0
     end
   end
 end

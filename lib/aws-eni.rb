@@ -209,11 +209,44 @@ module Aws
 
     # add new private ip using the AWS api and add it to our local ip config
     def assign_secondary_ip(interface, options = {})
-      raise NoMethodError, "assign_secondary_ip not yet implemented"
+      device = IFconfig.filter(interface).first
+      raise InvalidParameterError, "Interface #{interface} not found on local system" unless device
+      if options[:interface_id] && device.interface_id != options[:interface_id]
+        raise InvalidParameterError, "Interface #{options[:interface_id]} does not match #{interface}"
+      end
+      if options[:device_name] && device.name != options[:device_name]
+        raise InvalidParameterError, "Interface #{options[:device_name]} does not match #{interface}"
+      end
+      if options[:device_number] && device.device_number != options[:device_number].to_i
+        raise InvalidParameterError, "Interface #{interface} not found at index #{options[:device_number]}"
+      end
+
+      interface_id = device.interface_id
+      current_ips = interface_secondary_ips(interface_id)
+
+      if options[:private_ip]
+        client.assign_private_ip_addresses(
+          network_interface_id: interface_id,
+          private_ip_addresses: [options[:private_ip]],
+          allow_reassignment: false
+        )
+      else
+        client.assign_private_ip_addresses(
+          network_interface_id: interface_id,
+          secondary_private_ip_address_count: 1,
+          allow_reassignment: false
+        )
+      end
+
+      new_ip = nil
+      wait_for 'new private ip address to be assigned' do
+        new_ips = interface_secondary_ips(interface_id) - current_ips
+        new_ip = new_ips.first if new_ips
+      end
       {
-        private_ip:   '0.0.0.0',
-        device_name:  'eth0',
-        interface_id: 'eni-1a2b3c4d'
+        private_ip:   new_ip,
+        device_name:  device.name,
+        interface_id: interface_id
       }
     end
 
@@ -353,6 +386,15 @@ module Aws
     end
 
     private
+
+    def interface_secondary_ips(id)
+      resp = client.describe_network_interfaces(network_interface_ids: [id])
+      interface = resp[:network_interfaces].first
+      if interface && interface[:private_ip_addresses]
+        secondary_ips = interface[:private_ip_addresses].select{ |ip| !ip[:primary] }
+        secondary_ips.map { |ip| ip[:private_ip_address] }
+      end
+    end
 
     def interface_status(id)
       resp = client.describe_network_interfaces(network_interface_ids: [id])

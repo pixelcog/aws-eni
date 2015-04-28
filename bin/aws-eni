@@ -8,7 +8,7 @@ include GLI::App
 
 program_desc 'Manage and sync local network config with AWS Elastic Network Interfaces'
 
-version Aws::ENI::VERSION
+@version = Aws::ENI::VERSION
 
 autocomplete_commands true
 subcommand_option_handling :normal
@@ -17,8 +17,11 @@ sort_help :manually
 
 # global options
 
+desc 'Display the program version'
+switch [:v,:version], negatable: false
+
 desc 'Display all system commands and warnings'
-switch [:v,:verbose], negatable: false
+switch [:V,:verbose], negatable: false
 
 pre do |opt|
   Aws::ENI::IFconfig.verbose = opt[:verbose]

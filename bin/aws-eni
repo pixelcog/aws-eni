@@ -235,8 +235,11 @@ arg 'subnet-id', :optional
 arg 'security-groups', :optional
 arg 'ip-address', :optional
 command [:attach] do |c|
-  c.desc 'Do not configure or enable the device after attachment'
+  c.desc 'Do not configure or enable the device after attachment (implies block)'
   c.switch [:n,'no-config'], negatable: false
+
+  c.desc 'Do not return until attachment is complete'
+  c.switch [:b,:block], negatable: false
 
   c.action do |global,opts,args|
     config = !opts['no_config']
@@ -251,7 +254,7 @@ command [:attach] do |c|
       puts "interface #{interface[:id]} created on #{interface[:subnet_id]}"
       id = interface[:id]
     end
-    device = Aws::ENI.attach_interface(id, enable: config, configure: config)
+    device = Aws::ENI.attach_interface(id, enable: config, configure: config, block: options[:block])
     puts "interface #{device[:id]} attached to #{device[:name]}"
     puts "device #{device[:name]} enabled and configured" if opts[:config]
   end
@@ -269,12 +272,16 @@ long_desc %{
 }
 arg 'interface-id OR device-name'
 command [:detach] do |c|
-  c.desc 'Delete (or preserve) the unused ENI resource after dataching'
+  c.desc 'Delete (or preserve) the unused ENI resource after dataching (implies block)'
   c.switch [:d,:delete], default_value: :not_provided # GLI behavior workaround
+
+  c.desc 'Do not return until detachment is complete'
+  c.switch [:b,:block], negatable: false
 
   c.action do |global,opts,args|
     help_now! "Missing argument" if args.empty?
     params = parse_args args, :interface_id, :device_name
+    params[:block] = opts[:block]
     params[:delete] = opts[:delete] unless opts[:delete] == :not_provided
     id = params[:interface_id] || params[:device_name]
 

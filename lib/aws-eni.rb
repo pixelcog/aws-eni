@@ -96,8 +96,10 @@ module Aws
 
       response = client.attach_network_interface(params)
 
-      wait_for 'the interface to attach', rescue: ConnectionFailed do
-        interface.exists? && interface_status(interface.interface_id) == 'in-use'
+      if options[:block] || do_config || do_enable
+        wait_for 'the interface to attach', rescue: ConnectionFailed do
+          interface.exists? && interface_status(interface.interface_id) == 'in-use'
+        end
       end
       interface.configure if do_config
       interface.enable if do_enable

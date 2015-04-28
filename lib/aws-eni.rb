@@ -260,6 +260,59 @@ module Aws
       }
     end
 
+    # test whether we have permission to modify our local configuration
+    def can_modify_ifconfig?
+      IFconfig.mutable?
+    end
+
+    def assert_ifconfig_access
+      raise PermissionError, 'Insufficient user priveleges (try sudo)' unless can_modify_ifconfig?
+    end
+
+    # test whether we have the appropriate permissions within our AWS access
+    # credentials to perform all possible API calls
+    def can_access_ec2?
+      client = self.client
+      test_methods = {
+        describe_network_interfaces: nil,
+        create_network_interface: {
+          subnet_id: 'subnet-abcd1234'
+        },
+        attach_network_interface: {
+          network_interface_id: 'eni-abcd1234',
+          instance_id: 'i-abcd1234',
+          device_index: 0
+        },
+        detach_network_interface: {
+          attachment_id: 'eni-attach-abcd1234'
+        },
+        delete_network_interface: {
+          network_interface_id: 'eni-abcd1234'
+        },
+        create_tags: {
+          resources: ['eni-abcd1234'],
+          tags: []
+        }
+      }
+      test_methods.each do |method, params|
+        begin
+          params ||= {}
+          params[:dry_run] = true
+          client.public_send(method, params)
+          raise Error, "Unexpected behavior while testing AWS API access"
+        rescue Aws::EC2::Errors::DryRunOperation
+          # success
+        rescue Aws::EC2::Errors::UnauthorizedOperation
+          return false
+        end
+      end
+      true
+    end
+
+    def assert_ec2_access
+      raise AWSPermissionError, 'Insufficient AWS API access' unless can_access_ec2?
+    end
+
     private
 
     def interface_status(id)

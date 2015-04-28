@@ -9,5 +9,6 @@ module Aws
     class EnvironmentError < Error; end
     class CommandError < Error; end
     class PermissionError < CommandError; end
+    class AWSPermissionError < Error; end
   end
 end

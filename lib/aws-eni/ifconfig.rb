@@ -70,6 +70,14 @@ module Aws
           end
         end
 
+        # Test whether we have permission to run RTNETLINK commands
+        def mutable?
+          exec 'link set dev eth0' # random innocuous command
+          true
+        rescue PermissionError
+          false
+        end
+
         # Execute a command
         def exec(command, options = {})
           output = nil

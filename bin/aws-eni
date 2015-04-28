@@ -435,6 +435,35 @@ command [:release] do |c|
   end
 end
 
+desc 'Test access to AWS EC2 and our machine\'s network config'
+long_desc %{
+  Check for sufficient privileges to alter the local machine's network interface
+  configuration and verify that the AWS access credentials include permissions
+  necessary to perform all network related functions.
+}
+command [:test] do |c|
+  c.action do |global,opts,args|
+    help_now! "Too many arguments" if args.count > 1
+
+    print 'IFconfig permissions test... '
+    if Aws::ENI.can_modify_ifconfig?
+      puts 'success!'
+    else
+      puts 'failed'
+      puts "- unable to modify network configuration with /sbin/ip (try sudo)"
+    end
+
+    print 'AWS EC2 permissions test... '
+    if Aws::ENI.can_access_ec2?
+      puts 'success!'
+    else
+      puts 'failed'
+      puts "- insufficient EC2 access. Ensure you have granted access to the"
+      puts "  appropriate EC2 methods in your IAM policy (see documentation)"
+    end
+  end
+end
+
 # error handling
 
 on_error do |exception|

@@ -254,7 +254,7 @@ command [:attach] do |c|
       puts "interface #{interface[:id]} created on #{interface[:subnet_id]}"
       id = interface[:id]
     end
-    device = Aws::ENI.attach_interface(id, enable: config, configure: config, block: options[:block])
+    device = Aws::ENI.attach_interface(id, enable: config, configure: config, block: opts[:block])
     puts "interface #{device[:id]} attached to #{device[:name]}"
     puts "device #{device[:name]} enabled and configured" if opts[:config]
   end

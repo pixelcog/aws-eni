@@ -77,6 +77,10 @@ module Aws
 
     # attach network interface
     def attach_interface(id, options = {})
+      do_enable = true unless options[:enable] == false
+      do_config = true unless options[:configure] == false
+      assert_ifconfig_access if do_config || do_enable
+
       interface = IFconfig[options[:device_number] || options[:name]]
       raise InvalidParameterError, "Interface #{interface.name} is already in use" if interface.exists?
 
@@ -88,8 +92,8 @@ module Aws
       response = client.attach_network_interface(params)
       attached = wait_for(10) { interface.exists? }
       raise TimeoutError, "Timed out waiting for the interface to attach" unless attached
-      interface.configure if options[:configure]
-      interface.enable if options[:enable]
+      interface.configure if do_config
+      interface.enable if do_enable
       {
         id:           interface.interface_id,
         name:         interface.name,

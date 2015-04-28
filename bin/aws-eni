@@ -235,21 +235,23 @@ arg 'subnet-id', :optional
 arg 'security-groups', :optional
 arg 'ip-address', :optional
 command [:attach] do |c|
-  c.desc 'Refresh the interface configuration after attachment'
-  c.switch [:r,:c,:config], negatable: false
+  c.desc 'Do not configure or enable the device after attachment'
+  c.switch [:n,'no-config'], negatable: false
 
   c.action do |global,opts,args|
+    config = !opts['no_config']
     if args.first =~ /^eni-/
       help_now! 'Too many arguments' if args.count > 1
       id = args.first
     else
       args.delete('new')
       params = parse_args args, :subnet_id, :security_groups, :primary_ip
+      Aws::ENI.assert_ifconfig_access if config
       interface = Aws::ENI.create_interface(params)
       puts "interface #{interface[:id]} created on #{interface[:subnet_id]}"
       id = interface[:id]
     end
-    device = Aws::ENI.attach_interface(id, enable: opts[:config], configure: opts[:config])
+    device = Aws::ENI.attach_interface(id, enable: config, configure: config)
     puts "interface #{device[:id]} attached to #{device[:name]}"
     puts "device #{device[:name]} enabled and configured" if opts[:config]
   end

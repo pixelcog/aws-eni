@@ -339,7 +339,7 @@ module Aws
         begin
           break if block.call
         rescue Exception => e
-          raise unless errors.include?(e)
+          raise unless errors.any? { |error| error === e }
         end
         sleep interval
         timeout -= interval

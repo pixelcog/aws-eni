@@ -1,5 +1,6 @@
 require 'time'
 require 'net/http'
+require 'aws-eni/errors'
 
 module Aws
   module ENI
@@ -9,10 +10,6 @@ module Aws
       HOST = '169.254.169.254'
       PORT = '80'
       BASE = '/latest/meta-data/'
-
-      # Custom exception classes
-      class BadResponse < RuntimeError; end
-      class ConnectionFailed < RuntimeError; end
 
       # These are the errors we trap when attempting to talk to the instance
       # metadata service.  Any of these imply the service is not present, no

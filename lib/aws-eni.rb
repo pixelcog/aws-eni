@@ -23,7 +23,7 @@ module Aws
           raise EnvironmentError, "Unable to detect VPC settings, library incompatible with EC2-Classic"
         end
       end.freeze
-    rescue Meta::ConnectionFailed
+    rescue ConnectionFailed
       raise EnvironmentError, "Unable to load EC2 meta-data"
     end
 

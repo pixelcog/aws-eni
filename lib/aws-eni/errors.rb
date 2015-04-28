@@ -10,5 +10,7 @@ module Aws
     class CommandError < Error; end
     class PermissionError < CommandError; end
     class AWSPermissionError < Error; end
+    class BadResponse < Error; end
+    class ConnectionFailed < Error; end
   end
 end

@@ -273,20 +273,16 @@ module Aws
 
       # Add a secondary ip to this interface
       def add_alias(ip)
-        prefix = info[:subnet_cidr].split('/').last.to_i
         exec("addr add #{ip}/#{prefix} brd + dev #{name}")
-
-        unless name == 'eth0' || exec("rule list") =~ /from #{ip} lookup #{route_table}/
+        unless name == 'eth0' || exec("rule list").include?("from #{ip} lookup #{route_table}")
           exec("rule add from #{ip} lookup #{route_table}")
         end
       end
 
       # Remove a secondary ip from this interface
       def remove_alias
-        prefix = info[:subnet_cidr].split('/').last.to_i
         exec("addr del #{ip}/#{prefix} dev #{name}")
-
-        if name != 'eth0' && exec("rule list") =~ /([0-9]+):\s+from #{ip} lookup #{route_table}/
+        unless name == 'eth0' || !exec("rule list").match(/([0-9]+):\s+from #{ip} lookup #{route_table}/)
           exec("rule delete pref #{$1}")
         end
       end

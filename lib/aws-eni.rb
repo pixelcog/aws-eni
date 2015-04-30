@@ -91,28 +91,28 @@ module Aws
       do_config = true unless options[:configure] == false
       assert_ifconfig_access if do_config || do_enable
 
-      interface = IFconfig[options[:device_number] || options[:name]]
-      raise InvalidParameterError, "Interface #{interface.name} is already in use" if interface.exists?
+      device = IFconfig[options[:device_number] || options[:name]].assert(exists: false)
 
-      params = {}
-      params[:network_interface_id] = id
-      params[:instance_id] = environment[:instance_id]
-      params[:device_index] = interface.device_number
-
-      response = client.attach_network_interface(params)
+      response = client.attach_network_interface(
+        network_interface_id: id,
+        instance_id: environment[:instance_id],
+        device_index: device.device_number
+      )
 
       if options[:block] || do_config || do_enable
         wait_for 'the interface to attach', rescue: ConnectionFailed do
-          interface.exists? && interface_status(interface.interface_id) == 'in-use'
+          device.exists? && interface_status(device.interface_id) == 'in-use'
         end
       end
-      interface.configure if do_config
-      interface.enable if do_enable
+      device.configure if do_config
+      device.enable if do_enable
       {
-        id:           interface.interface_id,
-        name:         interface.name,
-        configured:   options[:configure],
-        api_response: response
+        interface_id:  device.interface_id,
+        device_name:   device.name,
+        device_number: device.device_number,
+        enabled:       do_enable,
+        configured:    do_config,
+        api_response:  response
       }
     end
 

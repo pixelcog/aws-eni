@@ -335,31 +335,43 @@ module Aws
       # Throw exception unless this interface matches the provided attributes
       # else returns self
       def assert(attr)
-        raise UnknownInterfaceError, error if error = attr.find do |attr,val|
+        error = nil
+        attr.find do |attr,val|
           next if val.nil?
-          case attr
-          when :exists
-            "Interface #{name} does not exist." if val && !exists?
-            "Interface #{name} exists." if !val && exists?
-          when :enabled
-            "Interface #{name} is not enabled." if val && !enabled?
-            "Interface #{name} is not disabled." if !val && enabled?
-          when :name, :device_name
-            "Interface #{name} does not match #{val}" unless name == val
-          when :index, :device_index, :device_number
-            "Interface #{name} does not match #{val}" unless device_number == val.to_i
-          when :hwaddr
-            "Interface #{name} does not match #{val}" unless hwaddr == val
-          when :interface_id
-            "Interface #{name} does not match #{val}" unless interface_id == val
-          when :subnet_id
-            "Interface #{name} does not match #{val}" unless subnet_id == val
-          when :ip, :has_ip, :public_ip, :local_ip
-            "Interface #{name} does not have IP #{val}" unless has_ip? val
-          else
-            "Unknown attribute: #{attr}"
-          end
+          error = case attr
+            when :exists
+              if val
+                "The specified interface does not exist." unless exists?
+              else
+                "Interface #{name} exists." if exists?
+              end
+            when :enabled
+              if val
+                "Interface #{name} is not enabled." unless enabled?
+              else
+                "Interface #{name} is not disabled." if enabled?
+              end
+            when :name, :device_name
+              "The specified interface does not match" unless name == val
+            when :index, :device_index, :device_number
+              "Interface #{name} is device number #{val}" unless device_number == val.to_i
+            when :hwaddr
+              "Interface #{name} does not match hwaddr #{val}" unless hwaddr == val
+            when :interface_id
+              "Interface #{name} does not have interface id #{val}" unless interface_id == val
+            when :subnet_id
+              "Interface #{name} does not have subnet id #{val}" unless subnet_id == val
+            when :ip, :has_ip
+              "Interface #{name} does not have IP #{val}" unless has_ip? val
+            when :public_ip
+              "Interface #{name} does not have private IP #{val}" unless public_ips.include? val
+            when :local_ip, :private_ip
+              "Interface #{name} does not have private IP #{val}" unless local_ips.include? val
+            else
+              "Unknown attribute: #{attr}"
+            end
         end
+        raise UnknownInterfaceError, error if error
         self
       end
 

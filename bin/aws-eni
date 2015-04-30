@@ -327,10 +327,20 @@ long_desc %{
 arg 'ip-address', :optional
 arg 'interface-id OR device-name'
 command [:assign] do |c|
+  c.desc 'Do not configure the interface after assignment'
+  c.switch [:n,'no-config'], negatable: false
+
+  c.desc 'Do not return until connection is verified'
+  c.switch [:b,:block], negatable: false
+
   c.action do |global,opts,args|
-    help_now! "Missing argument" if args.empty?
     params = parse_args args, :interface_id, :device_name, :private_ip
-    device = params[:interface_id] || params[:device_name]
+    device = params[:device_name] || params[:interface_id]
+    help_now! "Missing argument" if device.nil?
+
+    params.merge! configure: !opts['no-config'], block: opts[:block]
+    Aws::ENI.assert_ifconfig_access if params[:configure]
+
     assignment = Aws::ENI.assign_secondary_ip(device, params)
     puts "IP #{assignment[:private_ip]} assigned to #{assignment[:device_name]} (#{assignment[:interface_id]})"
   end

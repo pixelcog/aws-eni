@@ -209,7 +209,7 @@ module Aws
 
     # add new private ip using the AWS api and add it to our local ip config
     def assign_secondary_ip(interface, options = {})
-      device = IFconfig.filter(interface).first
+      device = IFconfig.filter(interface).first if interface
       raise InvalidParameterError, "Interface #{interface} not found on local system" unless device
       if options[:interface_id] && device.interface_id != options[:interface_id]
         raise InvalidParameterError, "Interface #{options[:interface_id]} does not match #{interface}"
@@ -224,24 +224,25 @@ module Aws
       interface_id = device.interface_id
       current_ips = interface_secondary_ips(interface_id)
 
-      if options[:private_ip]
+      if new_ip = options[:private_ip]
         client.assign_private_ip_addresses(
           network_interface_id: interface_id,
           private_ip_addresses: [options[:private_ip]],
           allow_reassignment: false
         )
+        wait_for 'private ip address to be assigned' do
+          interface_secondary_ips(interface_id).include?(new_ip)
+        end
       else
         client.assign_private_ip_addresses(
           network_interface_id: interface_id,
           secondary_private_ip_address_count: 1,
           allow_reassignment: false
         )
-      end
-
-      new_ip = nil
-      wait_for 'new private ip address to be assigned' do
-        new_ips = interface_secondary_ips(interface_id) - current_ips
-        new_ip = new_ips.first if new_ips
+        wait_for 'new private ip address to be assigned' do
+          new_ips = interface_secondary_ips(interface_id) - current_ips
+          new_ip = new_ips.first if new_ips
+        end
       end
       {
         private_ip:   new_ip,

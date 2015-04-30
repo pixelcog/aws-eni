@@ -206,30 +206,28 @@ module Aws
     end
 
     # add new private ip using the AWS api and add it to our local ip config
-    def assign_secondary_ip(interface, options = {})
-      device = IFconfig.filter(interface).first if interface
-      raise InvalidParameterError, "Interface #{interface} not found on local system" unless device
-      if options[:interface_id] && device.interface_id != options[:interface_id]
-        raise InvalidParameterError, "Interface #{options[:interface_id]} does not match #{interface}"
-      end
-      if options[:device_name] && device.name != options[:device_name]
-        raise InvalidParameterError, "Interface #{options[:device_name]} does not match #{interface}"
-      end
-      if options[:device_number] && device.device_number != options[:device_number].to_i
-        raise InvalidParameterError, "Interface #{interface} not found at index #{options[:device_number]}"
-      end
-
+    def assign_secondary_ip(id, options = {})
+      device = IFconfig[id].assert(
+        exists: true,
+        device_name:   options[:device_name],
+        interface_id:  options[:interface_id],
+        device_number: options[:device_number]
+      )
       interface_id = device.interface_id
-      current_ips = interface_secondary_ips(interface_id)
+      current_ips = interface_ips(interface_id)
+      new_ip = options[:private_ip]
 
       if new_ip = options[:private_ip]
+        if current_ips.include?(new_ip)
+          raise InvalidParameterError, "IP #{new_ip} already assigned to #{device.name}"
+        end
         client.assign_private_ip_addresses(
           network_interface_id: interface_id,
-          private_ip_addresses: [options[:private_ip]],
+          private_ip_addresses: [new_ip],
           allow_reassignment: false
         )
         wait_for 'private ip address to be assigned' do
-          interface_secondary_ips(interface_id).include?(new_ip)
+          interface_ips(interface_id).include?(new_ip)
         end
       else
         client.assign_private_ip_addresses(
@@ -238,7 +236,7 @@ module Aws
           allow_reassignment: false
         )
         wait_for 'new private ip address to be assigned' do
-          new_ips = interface_secondary_ips(interface_id) - current_ips
+          new_ips = interface_ips(interface_id) - current_ips
           new_ip = new_ips.first if new_ips
         end
       end
@@ -250,9 +248,11 @@ module Aws
         end
       end
       {
-        private_ip:   new_ip,
-        device_name:  device.name,
-        interface_id: interface_id
+        private_ip:    new_ip,
+        interface_id:  interface_id,
+        device_name:   device.name,
+        device_number: device.device_number,
+        interface_ips: current_ips << new_ip
       }
     end
 
@@ -393,12 +393,15 @@ module Aws
 
     private
 
-    def interface_secondary_ips(id)
+    def interface_ips(id)
       resp = client.describe_network_interfaces(network_interface_ids: [id])
       interface = resp[:network_interfaces].first
       if interface && interface[:private_ip_addresses]
-        secondary_ips = interface[:private_ip_addresses].select{ |ip| !ip[:primary] }
-        secondary_ips.map { |ip| ip[:private_ip_address] }
+        primary = interface[:private_ip_addresses].find { |ip| ip[:primary] }
+        interface[:private_ip_addresses].map { |ip| ip[:private_ip_address] }.tap do |ips|
+          # ensure primary ip is first in the list
+          ips.unshift(*ips.delete(primary[:private_ip_address])) if primary
+        end
       end
     end
 

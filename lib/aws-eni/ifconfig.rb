@@ -160,6 +160,14 @@ module Aws
         info[:subnet_cidr]
       end
 
+      def gateway
+        IPAddr.new(info[:subnet_cidr]).succ.to_s
+      end
+
+      def prefix
+        info[:subnet_cidr].split('/').last.to_i
+      end
+
       # Return an array of configured ip addresses (primary + secondary)
       def local_ips
         list = exec("addr show dev #{name} primary") +
@@ -181,9 +189,11 @@ module Aws
         ip_assoc
       end
 
-      # Enable our interface
+      # Enable our interface and create necessary routes
       def enable
         exec("link set dev #{name} up")
+        exec("route add default via #{gateway} dev #{name} table #{route_table}")
+        exec("route flush cache")
       end
 
       # Disable our interface
@@ -199,11 +209,9 @@ module Aws
       # Initialize a new interface config
       def configure(dry_run = false)
         changes = 0
-        info = self.info
-        prefix = info[:subnet_cidr].split('/').last.to_i
-        gateway = IPAddr.new(info[:subnet_cidr]).succ.to_s
+        prefix = self.prefix # prevent exists? check on each use
 
-        meta_ips = Meta.get("network/interfaces/macs/#{info[:hwaddr]}/local-ipv4s").lines.map(&:strip)
+        meta_ips = Meta.get("network/interfaces/macs/#{hwaddr}/local-ipv4s").lines.map(&:strip)
         local_primary, *local_aliases = local_ips
         meta_primary, *meta_aliases = meta_ips
 
@@ -212,8 +220,6 @@ module Aws
           unless dry_run
             deconfigure
             exec("addr add #{meta_primary}/#{prefix} brd + dev #{name}")
-            exec("route add default via #{gateway} dev #{name} table #{route_table}")
-            exec("route flush cache")
           end
           changes += 1
         end
@@ -230,6 +236,7 @@ module Aws
           changes += 1
         end
 
+        # add and remove source-ip based rules
         unless name == 'eth0'
           rules_to_add = meta_ips || []
           exec("rule list").lines.grep(/^([0-9]+):.*\s([0-9\.]+)\s+lookup #{route_table}/) do

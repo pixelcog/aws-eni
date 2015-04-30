@@ -390,7 +390,15 @@ module Aws
         release_address: {
           dry_run: true,
           allocation_id: 'eipalloc-no_exist'
+        },
+        associate_address: {
+          allocation_id: 'eipalloc-no_exist',
+          network_interface_id: 'eni-abcd1234'
         }
+        # has no dry_run method
+        # assign_private_ip_addresses: {
+        #   network_interface_id: 'eni-abcd1234'
+        # }
       }
       test_methods.each do |method, params|
         begin

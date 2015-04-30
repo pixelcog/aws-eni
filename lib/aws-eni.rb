@@ -272,14 +272,46 @@ module Aws
 
     # associate a private ip with an elastic ip through the AWS api
     def associate_elastic_ip(private_ip, options = {})
-      raise NoMethodError, "associate_elastic_ip not yet implemented"
+      find = options[:device_name] || options[:device_number] || options[:interface_id] || private_ip
+      device = IFconfig[find].assert(
+        exists: true,
+        private_ip:    private_ip,
+        device_name:   options[:device_name],
+        interface_id:  options[:interface_id],
+        device_number: options[:device_number]
+      )
+      options[:public_ip] ||= options[:allocation_id]
+
+      if public_ip = device.public_ips[private_ip]
+        raise InvalidParameterError, "IP #{private_ip} already has an associated EIP (#{public_ip})"
+      end
+
+      if options[:public_ip]
+        eip = describe_address(options[:public_ip])
+        if options[:allocation_id] && eip[:allocation_id] != options[:allocation_id]
+          raise InvalidParameterError, "EIP #{eip[:public_ip]} (#{eip[:allocation_id]}) does not match #{options[:allocation_id]}"
+        end
+      else
+        eip = allocate_elastic_ip
+      end
+
+      resp = client.associate_address(
+        network_interface_id: device.interface_id,
+        allocation_id:        eip[:allocation_id],
+        private_ip_address:   private_ip,
+        allow_reassociation:  false
+      )
+
+      if options[:block] && !IFconfig.test(private_ip)
+        raise TimeoutError, "Timed out waiting for ip address to become active"
+      end
       {
-        private_ip:     '0.0.0.0',
-        device_name:    'eth0',
-        interface_id:   'eni-1a2b3c4d',
-        public_ip:      '0.0.0.0',
-        allocation_id:  'eipalloc-1a2b3c4d',
-        association_id: 'eipassoc-1a2b3c4d'
+        private_ip:     private_ip,
+        device_name:    device.name,
+        interface_id:   device.interface_id,
+        public_ip:      eip[:public_ip],
+        allocation_id:  eip[:allocation_id],
+        association_id: resp[:association_id]
       }
     end
 
@@ -309,20 +341,10 @@ module Aws
 
     # release the specified elastic ip address
     def release_elastic_ip(ip)
-      filter_by = ip =~ Resolv::IPv4::Regex ? 'public-ip' : 'allocation-id'
-
-      eips = client.describe_addresses(filters: [
-        { name: 'domain', values: ['vpc'] },
-        { name: filter_by, values: [ip] }
-      ])
-      eip = eips[:addresses].first
-
-      if eip.nil?
-        raise InvalidParameterError, "No Elastic IP found matching: #{ip}"
-      elsif eip[:association_id]
+      eip = describe_address(ip)
+      if eip[:association_id]
         raise AWSPermissionError, "Elastic IP #{eip[:public_ip]} (#{eip[:allocation_id]}) is currently in use"
       end
-
       client.release_address(allocation_id: eip[:allocation_id])
       {
         public_ip:     eip[:public_ip],
@@ -392,6 +414,17 @@ module Aws
     end
 
     private
+
+    # use either an ip address or allocation id
+    def describe_address(address)
+      filter_by = address =~ Resolv::IPv4::Regex ? 'public-ip' : 'allocation-id'
+      resp = client.describe_addresses(filters: [
+        { name: 'domain', values: ['vpc'] },
+        { name: filter_by, values: [address] }
+      ])
+      raise InvalidParameterError, "IP #{address} could not be located" if resp[:addresses].empty?
+      resp[:addresses].first
+    end
 
     def interface_ips(id)
       resp = client.describe_network_interfaces(network_interface_ids: [id])

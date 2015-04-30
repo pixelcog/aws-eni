@@ -313,14 +313,14 @@ module Aws
       # Return an array representation of our interface config, including public
       # ip associations and enabled status
       def to_h
-        info.merge({
+        info.merge(
           name:          name,
           device_number: device_number,
           route_table:   route_table,
           local_ips:     local_ips,
           public_ips:    public_ips,
           enabled:       enabled?
-        })
+        )
       end
 
       private

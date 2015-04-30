@@ -86,7 +86,9 @@ module Aws
           puts "ip #{command}" if verbose
 
           Open3.popen3("/sbin/ip #{command}") do |i,o,e,t|
-            unless t.value.success?
+            if t.value.success?
+              output = o.read
+            else
               error_msg = e.read
               if error_msg =~ /operation not permitted/i
                 raise PermissionError, "Operation not permitted"
@@ -94,7 +96,6 @@ module Aws
               warn "Warning: #{error_msg}" if verbose
               raise CommandError, error_msg if raise_errors
             end
-            output = o.read
           end
           output
         end

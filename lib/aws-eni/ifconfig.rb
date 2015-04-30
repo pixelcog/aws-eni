@@ -13,21 +13,29 @@ module Aws
 
         # Array-like accessor to automatically instantiate our class
         def [](index)
-          index = $1.to_i if index.to_s =~ /^(?:eth)?([0-9]+)$/
-          index ||= next_available_index
-          @instance_cache ||= []
-          @instance_cache[index] ||= new("eth#{index}", false)
+          case index
+          when Integer
+            @instance_cache ||= []
+            @instance_cache[index] ||= new("eth#{index}", false)
+          when nil
+            self[next_available_index]
+          when /^(?:eth)?([0-9]+)$/
+            self[$1.to_i]
+          when /^eni-/
+            find { |dev| dev.instance_id == index }
+          when /^[0-9a-f:]+$/i
+            find { |dev| dev.hwaddr.casecmp(index) == 0 }
+          when /^[0-9\.]+$/
+            find { |dev| dev.has_ip?(index) }
+          end.tap do |dev|
+            raise UnknownInterfaceError, "No interface found matching #{index}" unless dev
+          end
         end
 
         # Purge and deconfigure non-existent interfaces from the cache
         def clean
           # exists? will automatically call deconfigure if necessary
           @instance_cache.map!{ |dev| dev if dev.exists? }
-        end
-
-        # Return array of available ethernet interfaces
-        def existing
-          Dir.entries("/sys/class/net/").grep(/^eth[0-9]+$/){ |name| self[name] }
         end
 
         # Return the next unused device index
@@ -39,7 +47,7 @@ module Aws
 
         # Iterate over available ethernet interfaces (required for Enumerable)
         def each(&block)
-          existing.each(&block)
+          Dir.entries("/sys/class/net/").grep(/^eth[0-9]+$/){ |name| self[name] }.each(&block)
         end
 
         # Return array of enabled interfaces
@@ -63,10 +71,16 @@ module Aws
 
         # Return an array of available interfaces identified by name, id,
         # hwaddr, or subnet id.
-        def filter(match = nil)
-          return existing unless match
-          select{ |dev| dev.is?(match) }.tap do |result|
-            raise UnknownInterfaceError, "No interface found matching \"#{match}\"" if result.empty?
+        def filter(filter = nil)
+          case filter
+          when nil
+            to_a
+          when /^eni-/, /^eth[0-9]+$/, /^[0-9a-f:]+$/i, /^[0-9\.]+$/
+            self[filter].to_a
+          when /^subnet-/
+            select { |dev| dev.subnet_id == filter }
+          end.tap do |devs|
+            raise UnknownInterfaceError, "No interface found matching #{filter}" if devs.nil? || devs.empty?
           end
         end
 
@@ -174,11 +188,11 @@ module Aws
       end
 
       def gateway
-        IPAddr.new(info[:subnet_cidr]).succ.to_s
+        IPAddr.new(subnet_cidr).succ.to_s
       end
 
       def prefix
-        info[:subnet_cidr].split('/').last.to_i
+        subnet_cidr.split('/').last.to_i
       end
 
       # Return an array of configured ip addresses (primary + secondary)
@@ -300,13 +314,14 @@ module Aws
         end
       end
 
-      # Identify this interface by one of its attributes
-      def is?(match)
-        if match == name
-          true
+      # Return true if the ip address is associated with this interface
+      def has_ip?(ip_addr)
+        if IPAddr.new(subnet_cidr) === IPAddr.new(ip_addr)
+          # ip within subnet
+          local_ips.include? ip_addr
         else
-          info = self.info
-          match == info[:interface_id] || match == info[:hwaddr] || match == info[:subnet_id]
+          # ip outside subnet
+          public_ips.has_value? ip_addr
         end
       end
 

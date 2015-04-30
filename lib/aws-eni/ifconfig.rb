@@ -72,29 +72,42 @@ module Aws
 
         # Test whether we have permission to run RTNETLINK commands
         def mutable?
-          exec 'link set dev eth0' # random innocuous command
+          cmd('link set dev eth0') # innocuous command
           true
         rescue PermissionError
           false
         end
 
-        # Execute a command
+        # Execute an 'ip' command
+        def cmd(command, options = {})
+          errors = options[:errors]
+          options[:errors] = true
+          begin
+            exec("/sbin/ip #{command}", options)
+          rescue CommandError => e
+            case e.message
+            when /operation not permitted/i
+              raise PermissionError, "Operation not permitted"
+            else
+              raise if errors
+            end
+          end
+        end
+
+        # Execute a command, returns output as string or nil on error
         def exec(command, options = {})
           output = nil
+          errors = options[:errors]
           verbose = self.verbose || options[:verbose]
-          raise_errors = options[:raise_errors]
-          puts "ip #{command}" if verbose
 
-          Open3.popen3("/sbin/ip #{command}") do |i,o,e,t|
+          puts command if verbose
+          Open3.popen3(command) do |i,o,e,t|
             if t.value.success?
               output = o.read
             else
-              error_msg = e.read
-              if error_msg =~ /operation not permitted/i
-                raise PermissionError, "Operation not permitted"
-              end
-              warn "Warning: #{error_msg}" if verbose
-              raise CommandError, error_msg if raise_errors
+              error = e.read
+              warn "Warning: #{error}" if verbose
+              raise CommandError, error if errors
             end
           end
           output
@@ -170,8 +183,8 @@ module Aws
 
       # Return an array of configured ip addresses (primary + secondary)
       def local_ips
-        list = exec("addr show dev #{name} primary") +
-               exec("addr show dev #{name} secondary")
+        list = cmd("addr show dev #{name} primary") +
+               cmd("addr show dev #{name} secondary")
         list.lines.grep(/inet ([0-9\.]+)\/.* #{name}/i){ $1 }
       end
 
@@ -191,19 +204,19 @@ module Aws
 
       # Enable our interface and create necessary routes
       def enable
-        exec("link set dev #{name} up")
-        exec("route add default via #{gateway} dev #{name} table #{route_table}")
-        exec("route flush cache")
+        cmd("link set dev #{name} up")
+        cmd("route add default via #{gateway} dev #{name} table #{route_table}")
+        cmd("route flush cache")
       end
 
       # Disable our interface
       def disable
-        exec("link set dev #{name} down")
+        cmd("link set dev #{name} down")
       end
 
       # Check whether our interface is enabled
       def enabled?
-        exists? && exec("link show up").include?(name)
+        exists? && cmd("link show up").include?(name)
       end
 
       # Initialize a new interface config
@@ -219,34 +232,34 @@ module Aws
         if name != 'eth0' && local_primary != meta_primary
           unless dry_run
             deconfigure
-            exec("addr add #{meta_primary}/#{prefix} brd + dev #{name}")
+            cmd("addr add #{meta_primary}/#{prefix} brd + dev #{name}")
           end
           changes += 1
         end
 
         # add missing secondary ips
         (meta_aliases - local_aliases).each do |ip|
-          exec("addr add #{ip}/#{prefix} brd + dev #{name}") unless dry_run
+          cmd("addr add #{ip}/#{prefix} brd + dev #{name}") unless dry_run
           changes += 1
         end
 
         # remove extra secondary ips
         (local_aliases - meta_aliases).each do |ip|
-          exec("addr del #{ip}/#{prefix} dev #{name}") unless dry_run
+          cmd("addr del #{ip}/#{prefix} dev #{name}") unless dry_run
           changes += 1
         end
 
         # add and remove source-ip based rules
         unless name == 'eth0'
           rules_to_add = meta_ips || []
-          exec("rule list").lines.grep(/^([0-9]+):.*\s([0-9\.]+)\s+lookup #{route_table}/) do
+          cmd("rule list").lines.grep(/^([0-9]+):.*\s([0-9\.]+)\s+lookup #{route_table}/) do
             unless rules_to_add.delete($2)
-              exec("rule delete pref #{$1}") unless dry_run
+              cmd("rule delete pref #{$1}") unless dry_run
               changes += 1
             end
           end
           rules_to_add.each do |ip|
-            exec("rule add from #{ip} lookup #{route_table}") unless dry_run
+            cmd("rule add from #{ip} lookup #{route_table}") unless dry_run
             changes += 1
           end
         end
@@ -259,31 +272,31 @@ module Aws
       def deconfigure
         # assume eth0 primary ip is managed by dhcp
         if name == 'eth0'
-          exec("addr flush dev eth0 secondary")
+          cmd("addr flush dev eth0 secondary")
         else
-          exec("rule list").lines.grep(/^([0-9]+):.*lookup #{route_table}/) do
-            exec("rule delete pref #{$1}")
+          cmd("rule list").lines.grep(/^([0-9]+):.*lookup #{route_table}/) do
+            cmd("rule delete pref #{$1}")
           end
-          exec("addr flush dev #{name}")
-          exec("route flush table #{route_table}")
-          exec("route flush cache")
+          cmd("addr flush dev #{name}")
+          cmd("route flush table #{route_table}")
+          cmd("route flush cache")
         end
         @clean = true
       end
 
       # Add a secondary ip to this interface
       def add_alias(ip)
-        exec("addr add #{ip}/#{prefix} brd + dev #{name}")
-        unless name == 'eth0' || exec("rule list").include?("from #{ip} lookup #{route_table}")
-          exec("rule add from #{ip} lookup #{route_table}")
+        cmd("addr add #{ip}/#{prefix} brd + dev #{name}")
+        unless name == 'eth0' || cmd("rule list").include?("from #{ip} lookup #{route_table}")
+          cmd("rule add from #{ip} lookup #{route_table}")
         end
       end
 
       # Remove a secondary ip from this interface
       def remove_alias
-        exec("addr del #{ip}/#{prefix} dev #{name}")
-        unless name == 'eth0' || !exec("rule list").match(/([0-9]+):\s+from #{ip} lookup #{route_table}/)
-          exec("rule delete pref #{$1}")
+        cmd("addr del #{ip}/#{prefix} dev #{name}")
+        unless name == 'eth0' || !cmd("rule list").match(/([0-9]+):\s+from #{ip} lookup #{route_table}/)
+          cmd("rule delete pref #{$1}")
         end
       end
 
@@ -313,9 +326,7 @@ module Aws
       private
 
       # Alias for static method
-      def exec(command, options = {})
-        self.class.exec(command, options)
-      end
+      def cmd(*args) self.class.cmd(*args) end
     end
   end
 end

@@ -213,7 +213,7 @@ command [:create] do |c|
     args.delete('new')
     params = parse_args args, :subnet_id, :security_groups, :primary_ip
     interface = Aws::ENI.create_interface(params)
-    puts "interface #{interface[:id]} created on #{interface[:subnet_id]}"
+    puts "interface #{interface[:interface_id]} created on #{interface[:subnet_id]}"
   end
 end
 
@@ -251,8 +251,8 @@ command [:attach] do |c|
       params = parse_args args, :subnet_id, :security_groups, :primary_ip
       Aws::ENI.assert_ifconfig_access if config
       interface = Aws::ENI.create_interface(params)
-      puts "interface #{interface[:id]} created on #{interface[:subnet_id]}"
-      id = interface[:id]
+      puts "interface #{interface[:interface_id]} created on #{interface[:subnet_id]}"
+      id = interface[:interface_id]
     end
     device = Aws::ENI.attach_interface(id, enable: config, configure: config, block: opts[:block])
     puts "interface #{device[:id]} attached to #{device[:name]}"

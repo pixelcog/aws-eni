@@ -79,7 +79,7 @@ module Aws
         end
       end
       {
-        id:           response[:network_interface][:network_interface_id],
+        interface_id: response[:network_interface][:network_interface_id],
         subnet_id:    response[:network_interface][:subnet_id],
         api_response: response[:network_interface]
       }

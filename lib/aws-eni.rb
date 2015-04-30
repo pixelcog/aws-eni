@@ -187,14 +187,13 @@ module Aws
 
       descriptions = client.describe_network_interfaces(filters: filters)
       interfaces = descriptions[:network_interfaces].select do |interface|
-        skip = safe_mode && interface.tag_set.any? do |tag|
+        unless safe_mode && interface.tag_set.any? do |tag|
           begin
             tag.key == 'created on' && Time.now - Time.parse(tag.value) < 60
           rescue ArgumentError
             false
           end
         end
-        unless skip
           client.delete_network_interface(network_interface_id: interface[:network_interface_id])
           true
         end

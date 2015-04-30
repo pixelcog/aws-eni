@@ -244,6 +244,13 @@ module Aws
           new_ip = new_ips.first if new_ips
         end
       end
+
+      unless options[:configure] == false
+        device.add_alias(new_ip)
+        if options[:block] && !IFconfig.test(new_ip, target: device.gateway)
+          raise TimeoutError, "Timed out waiting for ip address to become active"
+        end
+      end
       {
         private_ip:   new_ip,
         device_name:  device.name,

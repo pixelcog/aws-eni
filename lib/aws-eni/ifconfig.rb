@@ -108,6 +108,13 @@ module Aws
           end
         end
 
+        # Test connectivity from a given ip address
+        def test(ip, options = {})
+          timeout = Integer(options[:timeout] || 30)
+          target = options[:target] || '8.8.8.8'
+          !!exec("ping -w #{timeout} -c 1 -I #{ip} #{target}")
+        end
+
         # Execute a command, returns output as string or nil on error
         def exec(command, options = {})
           output = nil

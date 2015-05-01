@@ -257,15 +257,44 @@ module Aws
 
     # remove a private ip using the AWS api and remove it from local config
     def unassign_secondary_ip(private_ip, options = {})
-      raise NoMethodError, "unassign_secondary_ip not yet implemented"
+      do_release = !!options[:release]
+
+      find = options[:device_name] || options[:device_number] || options[:interface_id] || private_ip
+      device = IFconfig[find].assert(
+        exists: true,
+        device_name:   options[:device_name],
+        interface_id:  options[:interface_id],
+        device_number: options[:device_number]
+      )
+
+      resp = client.describe_network_interfaces(network_interface_ids: [device.interface_id])
+      interface = resp[:network_interfaces].first
+      raise UnknownInterfaceError, "Interface attachment could not be located" unless interface
+
+      unless addr_info = interface[:private_ip_addresses].find { |addr| addr[:private_ip_address] == private_ip }
+        raise InvalidParameterError, "IP #{private_ip} not found on #{device.name}"
+      end
+      if addr_info[:primary]
+        raise InvalidParameterError, "The primary IP address of an interface cannot be unassigned"
+      end
+
+      if assoc = addr_info[:association]
+        client.release_address(allocation_id: assoc[:allocation_id]) if do_release
+      end
+
+      device.remove_alias(private_ip)
+      client.unassign_private_ip_addresses(
+        network_interface_id: interface[:network_interface_id],
+        private_ip_addresses: [private_ip]
+      )
       {
-        private_ip:     '0.0.0.0',
-        device_name:    'eth0',
-        interface_id:   'eni-1a2b3c4d',
-        public_ip:      '0.0.0.0',
-        allocation_id:  'eipalloc-1a2b3c4d',
-        association_id: 'eipassoc-1a2b3c4d',
-        released:       true
+        private_ip:     private_ip,
+        device_name:    device.name,
+        interface_id:   device.interface_id,
+        public_ip:      assoc[:public_ip],
+        allocation_id:  assoc[:allocation_id],
+        association_id: assoc[:association_id],
+        released:       assoc && do_release
       }
     end
 

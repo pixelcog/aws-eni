@@ -236,13 +236,13 @@ arg 'security-groups', :optional
 arg 'ip-address', :optional
 command [:attach] do |c|
   c.desc 'Do not configure or enable the device after attachment (implies block)'
-  c.switch [:n,'no-config'], negatable: false
+  c.switch [:n,:noconfig], negatable: false
 
   c.desc 'Do not return until attachment is complete'
   c.switch [:b,:block], negatable: false
 
   c.action do |global,opts,args|
-    config = !opts['no_config']
+    config = !opts[:noconfig]
     if args.first =~ /^eni-/
       help_now! 'Too many arguments' if args.count > 1
       id = args.first
@@ -328,7 +328,7 @@ arg 'ip-address', :optional
 arg 'interface-id OR device-name'
 command [:assign] do |c|
   c.desc 'Do not configure the interface after assignment'
-  c.switch [:n,'no-config'], negatable: false
+  c.switch [:n,:noconfig], negatable: false
 
   c.desc 'Do not return until connection is verified'
   c.switch [:b,:block], negatable: false
@@ -338,7 +338,7 @@ command [:assign] do |c|
     device = params[:device_name] || params[:interface_id]
     help_now! "Missing argument" if device.nil?
 
-    params.merge! configure: !opts['no-config'], block: opts[:block]
+    params.merge! configure: !opts[:noconfig], block: opts[:block]
     Aws::ENI.assert_ifconfig_access if params[:configure]
 
     assignment = Aws::ENI.assign_secondary_ip(device, params)

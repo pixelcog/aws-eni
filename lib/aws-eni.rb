@@ -478,7 +478,7 @@ module Aws
         when /^eipalloc-/
           'allocation-id'
         when /^eipassoc-/
-          'allocation-id'
+          'association-id'
         else
           if IPAddr.new(environment[:vpc_cidr]) === IPAddr.new(address)
             'private-ip-address'

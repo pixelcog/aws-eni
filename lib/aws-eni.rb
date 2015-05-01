@@ -300,6 +300,8 @@ module Aws
 
     # associate a private ip with an elastic ip through the AWS api
     def associate_elastic_ip(private_ip, options = {})
+      raise MissingParameterError, "You must specify a private ip address" unless private_ip
+
       find = options[:device_name] || options[:device_number] || options[:interface_id] || private_ip
       device = IFconfig[find].assert(
         exists: true,

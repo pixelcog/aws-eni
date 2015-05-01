@@ -395,10 +395,11 @@ command [:associate] do |c|
   c.switch [:b,:block], negatable: false
 
   c.action do |global,opts,args|
-    help_now! "Missing argument" if args.empty?
     args.delete('new')
     params = parse_args args, :private_ip, :public_ip, :allocation_id, :interface_id, :device_name
     params[:block] = opts[:block]
+    help_now! "Missing argument" unless params[:private_ip]
+
     assoc = Aws::ENI.associate_elastic_ip(params[:private_ip], params)
     puts "EIP #{assoc[:public_ip]} (#{assoc[:allocation_id]}) associated with #{assoc[:private_ip]} on #{assoc[:device_name]} (#{assoc[:interface_id]})"
   end

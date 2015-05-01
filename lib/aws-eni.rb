@@ -279,7 +279,7 @@ module Aws
       end
 
       if assoc = addr_info[:association]
-        client.release_address(allocation_id: assoc[:allocation_id]) if do_release
+        dissociate_elastic_ip(assoc[:allocation_id], release: do_release)
       end
 
       device.remove_alias(private_ip)

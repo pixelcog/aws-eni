@@ -142,7 +142,19 @@ module Aws
         force: true
       )
       created_by_us = interface.tag_set.any? { |tag| tag.key == 'created by' && tag.value == owner_tag }
-      do_delete = options[:delete] || options[:delete].nil? && created_by_us
+      do_delete = options[:delete] != false && created_by_us
+      do_release = !!options[:release]
+
+      public_ips = []
+      interface[:private_ip_addresses].each do |addr|
+        if assoc = addr[:association]
+          public_ips << {
+            public_ip:     assoc[:public_ip],
+            allocation_id: assoc[:allocation_id]
+          }
+          dissociate_elastic_ip(assoc[:allocation_id], release: true) if do_release
+        end
+      end
 
       if options[:block] || do_delete
         wait_for 'the interface to detach', interval: 0.3 do
@@ -156,6 +168,8 @@ module Aws
         device_number: device.device_number,
         created_by_us: created_by_us,
         deleted:       do_delete,
+        released:      do_release,
+        public_ips:    public_ips,
         api_response:  interface
       }
     end

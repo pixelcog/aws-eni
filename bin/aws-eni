@@ -275,6 +275,9 @@ command [:detach] do |c|
   c.desc 'Delete (or preserve) the unused ENI resource after dataching (implies block)'
   c.switch [:d,:delete], default_value: :not_provided # GLI behavior workaround
 
+  c.desc 'Release any associated public IP addresses'
+  c.switch [:r,:release], negatable: false
+
   c.desc 'Do not return until detachment is complete'
   c.switch [:b,:block], negatable: false
 
@@ -283,9 +286,18 @@ command [:detach] do |c|
     params = parse_args args, :interface_id, :device_name
     params[:block] = opts[:block]
     params[:delete] = opts[:delete] unless opts[:delete] == :not_provided
+    params[:release] = opts[:release]
     id = params[:device_name] || params[:interface_id]
 
     device = Aws::ENI.detach_interface(id, params)
+
+    device[:public_ips].each do |address|
+      if device[:released]
+        puts "EIP #{address[:public_ip]} (#{address[:allocation_id]}) dissociated and released"
+      else
+        puts "EIP #{address[:public_ip]} (#{address[:allocation_id]}) dissociated"
+      end
+    end
     if device[:deleted]
       puts "interface #{device[:interface_id]} detached from #{device[:device_name]} and deleted"
     else

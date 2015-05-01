@@ -291,9 +291,9 @@ module Aws
         private_ip:     private_ip,
         device_name:    device.name,
         interface_id:   device.interface_id,
-        public_ip:      assoc[:public_ip],
-        allocation_id:  assoc[:allocation_id],
-        association_id: assoc[:association_id],
+        public_ip:      assoc && assoc[:public_ip],
+        allocation_id:  assoc && assoc[:allocation_id],
+        association_id: assoc && assoc[:association_id],
         released:       assoc && do_release
       }
     end

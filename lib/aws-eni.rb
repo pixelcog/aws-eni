@@ -1,5 +1,4 @@
 require 'time'
-require 'resolv'
 require 'aws-sdk'
 require 'aws-eni/version'
 require 'aws-eni/errors'
@@ -425,7 +424,18 @@ module Aws
 
     # use either an ip address or allocation id
     def describe_address(address)
-      filter_by = address =~ Resolv::IPv4::Regex ? 'public-ip' : 'allocation-id'
+      filter_by = case address
+        when /^eipalloc-/
+          'allocation-id'
+        when /^eipassoc-/
+          'allocation-id'
+        else
+          if IPAddr.new(environment[:vpc_cidr]) === IPAddr.new(address)
+            'private-ip-address'
+          else
+            'public-ip'
+          end
+        end
       resp = client.describe_addresses(filters: [
         { name: 'domain', values: ['vpc'] },
         { name: filter_by, values: [address] }

@@ -240,7 +240,8 @@ module Aws
           allow_reassignment: false
         )
         wait_for 'private ip address to be assigned' do
-          interface_ips(interface_id).include?(new_ip)
+          interface_ips(interface_id).include?(new_ip) ||
+          device.local_ips.include?(new_ip)
         end
       else
         client.assign_private_ip_addresses(
@@ -250,6 +251,7 @@ module Aws
         )
         wait_for 'new private ip address to be assigned' do
           new_ips = interface_ips(interface_id) - current_ips
+          new_ips = device.local_ips - current_ips if new_ips.empty?
           new_ip = new_ips.first if new_ips
         end
       end

@@ -24,6 +24,7 @@ desc 'Display all system commands and warnings'
 switch [:V,:verbose], negatable: false
 
 pre do |opt|
+  Aws::ENI.timeout 90
   Aws::ENI::IFconfig.verbose = opt[:verbose]
   true
 end

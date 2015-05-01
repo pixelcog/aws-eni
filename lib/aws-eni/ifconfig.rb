@@ -22,7 +22,7 @@ module Aws
           when /^(?:eth)?([0-9]+)$/
             self[$1.to_i]
           when /^eni-/
-            find { |dev| dev.instance_id == index }
+            find { |dev| dev.interface_id == index }
           when /^[0-9a-f:]+$/i
             find { |dev| dev.hwaddr.casecmp(index) == 0 }
           when /^[0-9\.]+$/

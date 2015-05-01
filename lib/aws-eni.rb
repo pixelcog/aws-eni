@@ -346,15 +346,36 @@ module Aws
     # dissociate a public ip from a private ip through the AWS api and
     # optionally release the public ip
     def dissociate_elastic_ip(ip, options = {})
-      raise NoMethodError, "dissociate_elastic_ip not yet implemented"
+      do_release = !!options[:release]
+      eip = describe_address(ip)
+
+      if find = options[:device_name] || options[:device_number] || options[:interface_id]
+        device = IFconfig[find].assert(
+          device_name:   options[:device_name],
+          device_number: options[:device_number],
+          interface_id:  options[:interface_id]
+        )
+        if device.interface_id != eip[:network_interface_id]
+          raise UnknownInterfaceError, "EIP #{public_ip} is not associated with interface #{device.name} (#{device.interface_id})"
+        end
+      else
+        begin
+          device = IFconfig[eip[:network_interface_id]]
+        rescue UnknownInterfaceError
+          raise UnknownInterfaceError, "EIP #{public_ip} is not associated with an interface on this machine"
+        end
+      end
+
+      client.disassociate_address(association_id: eip[:association_id])
+      client.release_address(allocation_id: eip[:allocation_id]) if do_release
       {
-        private_ip:     '0.0.0.0',
-        device_name:    'eth0',
-        interface_id:   'eni-1a2b3c4d',
-        public_ip:      '0.0.0.0',
-        allocation_id:  'eipalloc-1a2b3c4d',
-        association_id: 'eipassoc-1a2b3c4d',
-        released:       true
+        private_ip:     eip[:private_ip_address],
+        device_name:    device.name,
+        interface_id:   eip[:network_interface_id],
+        public_ip:      eip[:public_ip],
+        allocation_id:  eip[:allocation_id],
+        association_id: eip[:association_id],
+        released:       do_release
       }
     end
 

@@ -314,7 +314,7 @@ module Aws
       end
 
       # Remove a secondary ip from this interface
-      def remove_alias
+      def remove_alias(ip)
         cmd("addr del #{ip}/#{prefix} dev #{name}")
         unless name == 'eth0' || !cmd("rule list").match(/([0-9]+):\s+from #{ip} lookup #{route_table}/)
           cmd("rule delete pref #{$1}")

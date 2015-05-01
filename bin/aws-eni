@@ -361,9 +361,10 @@ command [:unassign] do |c|
   c.switch [:r,:release], negatable: false
 
   c.action do |global,opts,args|
-    help_now! "Missing argument" if args.empty?
     params = parse_args args, :interface_id, :device_name, :private_ip
+    help_now! "Missing argument" unless params[:private_ip]
     params[:release] = opts[:release]
+
     unassign = Aws::ENI.unassign_secondary_ip(params[:private_ip], params)
     if unassign[:released]
       puts "EIP #{unassign[:public_ip]} (#{unassign[:allocation_id]}) dissociated from #{unassign[:private_ip]} and released"
@@ -416,10 +417,10 @@ command [:dissociate] do |c|
   c.switch [:r,:release], negatable: false
 
   c.action do |global,opts,args|
-    help_now! "Missing argument" if args.empty?
     params = parse_args args, :private_ip, :public_ip, :allocation_id, :association_id, :interface_id, :device_name
-    ip = params[:private_ip] || params[:public_ip] || params[:association_id] || params[:allocation_id]
-    dissoc = Aws::ENI.dissociate_elastic_ip(ip, params)
+    address = params[:private_ip] || params[:public_ip] || params[:association_id] || params[:allocation_id]
+    help_now! "Missing argument" unless address
+    dissoc = Aws::ENI.dissociate_elastic_ip(address, params)
     if dissoc[:released]
       puts "EIP #{dissoc[:public_ip]} (#{dissoc[:allocation_id]}) dissociated from #{dissoc[:private_ip]} on #{dissoc[:device_name]} (#{dissoc[:interface_id]}) and released"
     else

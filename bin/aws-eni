@@ -418,6 +418,7 @@ command [:dissociate] do |c|
 
   c.action do |global,opts,args|
     params = parse_args args, :private_ip, :public_ip, :allocation_id, :association_id, :interface_id, :device_name
+    params[:release] = opts[:release]
     address = params[:private_ip] || params[:public_ip] || params[:association_id] || params[:allocation_id]
     help_now! "Missing argument" unless address
     dissoc = Aws::ENI.dissociate_elastic_ip(address, params)

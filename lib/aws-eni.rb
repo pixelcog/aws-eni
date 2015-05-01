@@ -123,6 +123,9 @@ module Aws
         interface_id:  options[:interface_id],
         device_number: options[:device_number]
       )
+      if device.name == 'eth0'
+        raise InvalidParameterError, "For safety, interface eth0 cannot be detached."
+      end
       interface_id = device.interface_id
 
       response = client.describe_network_interfaces(filters: [{
@@ -382,6 +385,10 @@ module Aws
         rescue UnknownInterfaceError
           raise UnknownInterfaceError, "EIP #{public_ip} is not associated with an interface on this machine"
         end
+      end
+
+      if device.name == 'eth0' && device.local_ips.first == eip[:private_ip_address]
+        raise InvalidParameterError, "Cannot dissociate primary ip's public address on eth0"
       end
 
       client.disassociate_address(association_id: eip[:association_id])

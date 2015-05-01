@@ -216,7 +216,7 @@ module Aws
       current_ips = interface_ips(interface_id)
       new_ip = options[:private_ip]
 
-      if new_ip = options[:private_ip]
+      if new_ip
         if current_ips.include?(new_ip)
           raise InvalidParameterError, "IP #{new_ip} already assigned to #{device.name}"
         end

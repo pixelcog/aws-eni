@@ -366,36 +366,54 @@ module Aws
 
     # dissociate a public ip from a private ip through the AWS api and
     # optionally release the public ip
-    def dissociate_elastic_ip(ip, options = {})
+    def dissociate_elastic_ip(address, options = {})
       do_release = !!options[:release]
-      eip = describe_address(ip)
 
-      if find = options[:device_name] || options[:device_number] || options[:interface_id]
+      # assert device attributes if we've specified a device
+      if find = options[:device_name] || options[:device_number]
         device = IFconfig[find].assert(
           device_name:   options[:device_name],
           device_number: options[:device_number],
-          interface_id:  options[:interface_id]
+          interface_id:  options[:interface_id],
+          private_ip:    options[:private_ip],
+          public_ip:     options[:public_ip]
         )
-        if device.interface_id != eip[:network_interface_id]
-          raise UnknownInterfaceError, "EIP #{public_ip} is not associated with interface #{device.name} (#{device.interface_id})"
-        end
-      else
-        begin
-          device = IFconfig[eip[:network_interface_id]]
-        rescue UnknownInterfaceError
-          raise UnknownInterfaceError, "EIP #{public_ip} is not associated with an interface on this machine"
-        end
       end
 
-      if device.name == 'eth0' && device.local_ips.first == eip[:private_ip_address]
-        raise InvalidParameterError, "Cannot dissociate primary ip's public address on eth0"
+      # get our address info
+      eip = describe_address(address)
+      device ||= IFconfig.find { |dev| dev.interface_id == eip[:network_interface_id] }
+
+      # assert eip attributes if options provided
+      if options[:private_ip] && eip[:private_ip_address] != options[:private_ip]
+        raise InvalidParameterError, "#{address} is not associated with IP #{options[:private_ip]}"
+      end
+      if options[:public_ip] && eip[:public_ip] != options[:public_ip]
+        raise InvalidParameterError, "#{address} is not associated with public IP #{options[:public_ip]}"
+      end
+      if options[:allocation_id] && eip[:allocation_id] != options[:allocation_id]
+        raise InvalidParameterError, "#{address} is not associated with allocation ID #{options[:allocation_id]}"
+      end
+      if options[:association_id] && eip[:association_id] != options[:association_id]
+        raise InvalidParameterError, "#{address} is not associated with association ID #{options[:association_id]}"
+      end
+      if options[:interface_id] && eip[:network_interface_id] != options[:interface_id]
+        raise InvalidParameterError, "#{address} is not associated with interface ID #{options[:interface_id]}"
+      end
+
+      if device
+        if device.name == 'eth0' && device.local_ips.first == eip[:private_ip_address]
+          raise InvalidParameterError, "For safety, a public address cannot be dissociated from the primary IP on eth0"
+        end
+      elsif interface_status(eip[:network_interface_id]) != 'available'
+        raise InvalidParameterError, "#{address} is associated with an interface attached to another machine"
       end
 
       client.disassociate_address(association_id: eip[:association_id])
       client.release_address(allocation_id: eip[:allocation_id]) if do_release
       {
         private_ip:     eip[:private_ip_address],
-        device_name:    device.name,
+        device_name:    device && device.name,
         interface_id:   eip[:network_interface_id],
         public_ip:      eip[:public_ip],
         allocation_id:  eip[:allocation_id],

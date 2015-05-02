@@ -179,6 +179,8 @@ module Aws
 
     # delete unattached network interfaces
     def clean_interfaces(filter = nil, options = {})
+      public_ips = []
+      do_release = !!options[:release]
       safe_mode = true unless options[:safe_mode] == false
 
       filters = [
@@ -203,20 +205,30 @@ module Aws
 
       descriptions = client.describe_network_interfaces(filters: filters)
       interfaces = descriptions[:network_interfaces].select do |interface|
-        unless safe_mode && interface.tag_set.any? do |tag|
+        created_recently = interface.tag_set.any? do |tag|
           begin
             tag.key == 'created on' && Time.now - Time.parse(tag.value) < 60
           rescue ArgumentError
-            false
           end
         end
+        unless safe_mode && created_recently
+          interface[:private_ip_addresses].each do |addr|
+            if assoc = addr[:association]
+              public_ips << {
+                public_ip:     assoc[:public_ip],
+                allocation_id: assoc[:allocation_id]
+              }
+              dissociate_elastic_ip(assoc[:allocation_id], release: true) if do_release
+            end
+          end
           client.delete_network_interface(network_interface_id: interface[:network_interface_id])
           true
         end
       end
       {
-        count:        interfaces.count,
-        deleted:      interfaces.map { |eni| eni[:network_interface_id] },
+        interfaces:   interfaces.map { |eni| eni[:network_interface_id] },
+        public_ips:   public_ips,
+        released:     do_release,
         api_response: interfaces
       }
     end

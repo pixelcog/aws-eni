@@ -323,10 +323,24 @@ command [:clean] do |c|
   c.desc 'Force deletion of all unattached interfaces which meet our criteria'
   c.switch [:f,:force], negatable: false
 
+  c.desc 'Release any associated public IP addresses'
+  c.switch [:r,:release], negatable: false
+
   c.action do |global,opts,args|
     help_now! "Too many arguments" if args.count > 1
-    deleted = Aws::ENI.clean_interfaces(args.first, safe_mode: !opts[:force])
-    puts "#{deleted[:count]} interfaces deleted"
+    deleted = Aws::ENI.clean_interfaces(args.first, safe_mode: !opts[:force], release: opts[:release])
+
+    deleted[:public_ips].each do |address|
+      if deleted[:released]
+        puts "EIP #{address[:public_ip]} (#{address[:allocation_id]}) dissociated and released"
+      else
+        puts "EIP #{address[:public_ip]} (#{address[:allocation_id]}) dissociated"
+      end
+    end
+    deleted[:interfaces].each do |interface_id|
+      puts "interface #{interface_id} deleted"
+    end
+    puts "#{deleted[:interfaces].count} interfaces deleted"
   end
 end
 

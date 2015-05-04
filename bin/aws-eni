@@ -298,7 +298,7 @@ command [:detach] do |c|
     device[:public_ips].each do |address|
       if device[:released]
         puts "EIP #{address[:public_ip]} (#{address[:allocation_id]}) dissociated and released"
-      else
+      elsif device[:deleted]
         puts "EIP #{address[:public_ip]} (#{address[:allocation_id]}) dissociated"
       end
     end

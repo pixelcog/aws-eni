@@ -3,7 +3,7 @@ require 'aws-sdk'
 require 'aws-eni/version'
 require 'aws-eni/errors'
 require 'aws-eni/meta'
-require 'aws-eni/ifconfig'
+require 'aws-eni/interface'
 
 module Aws
   module ENI

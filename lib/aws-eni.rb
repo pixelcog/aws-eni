@@ -110,11 +110,15 @@ module Aws
 
       device = Interface[options[:device_number] || options[:name]].assert(exists: false)
 
-      response = client.attach_network_interface(
-        network_interface_id: id,
-        instance_id: environment[:instance_id],
-        device_index: device.device_number
-      )
+      begin
+        response = client.attach_network_interface(
+          network_interface_id: id,
+          instance_id: environment[:instance_id],
+          device_index: device.device_number
+        )
+      rescue EC2::Errors::AttachmentLimitExceeded
+        raise Errors::ClientOperationError, "Unable to attach #{id} to #{device.name} (attachment limit exceeded)"
+      end
 
       if options[:block] || do_config || do_enable
         wait_for 'the interface to attach', rescue: Errors::MetaNotFound do

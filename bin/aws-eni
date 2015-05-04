@@ -248,8 +248,17 @@ command [:attach] do |c|
       interface = Aws::ENI.create_interface(params)
       puts "interface #{interface[:interface_id]} created on #{interface[:subnet_id]}"
       id = interface[:interface_id]
+      new_interface = true
     end
-    device = Aws::ENI.attach_interface(id, enable: config, configure: config, block: opts[:block])
+    begin
+      device = Aws::ENI.attach_interface(id, enable: config, configure: config, block: opts[:block])
+    rescue Aws::ENI::Errors::ClientOperationError => e
+      warn e.message
+      if new_interface && Aws::ENI.clean_interfaces(id, safe_mode: false)
+        puts "interface #{id} deleted"
+      end
+      exit_now! "attachment failed"
+    end
     puts "interface #{device[:interface_id]} attached to #{device[:device_name]}"
     puts "device #{device[:device_name]} enabled and configured" if config
   end

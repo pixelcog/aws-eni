@@ -15,7 +15,7 @@ module Aws
         Meta.connection do
           env[:instance_id] =       Meta.instance('instance-id')
           env[:availability_zone] = Meta.instance('placement/availability-zone')
-          env[:region] =            env[:availability_zone].sub(/(.*)[a-z]/,'\1')
+          env[:region] =            env[:availability_zone].sub(/^(.*)[a-z]$/,'\1')
           env[:vpc_id] =            Meta.interface(hwaddr, 'vpc-id')
           env[:vpc_cidr] =          Meta.interface(hwaddr, 'vpc-ipv4-cidr-block')
         end

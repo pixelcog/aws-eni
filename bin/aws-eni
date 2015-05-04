@@ -25,7 +25,7 @@ switch [:V,:verbose], negatable: false
 
 pre do |opt|
   Aws::ENI.timeout 90
-  Aws::ENI::IFconfig.verbose = opt[:verbose]
+  Aws::ENI.verbose opt[:verbose]
   true
 end
 
@@ -164,8 +164,8 @@ command [:enable,:up] do |c|
   c.action do |global,opts,args|
     help_now! "Incorrect number of arguments" unless args.count.between?(0,1)
     args.delete('all')
-    Aws::ENI::IFconfig.filter(args.first).each(&:enable)
-    puts "interfaces enabled"
+    enabled = Aws::ENI::enable(args.first)
+    puts "#{enabled} interfaces enabled"
   end
 end
 
@@ -183,14 +183,8 @@ command [:disable,:down] do |c|
   c.action do |global,opts,args|
     help_now! "Incorrect number of arguments" unless args.count.between?(0,1)
     args.delete('all')
-    Aws::ENI::IFconfig.filter(args.first).each do |dev|
-      if dev.name == 'eth0'
-        warn 'skipping eth0'
-      else
-        dev.disable
-        puts "interface #{dev.name} disabled"
-      end
-    end
+    disabled = Aws::ENI::disable(args.first)
+    puts "#{disabled} interfaces disabled"
   end
 end
 
@@ -250,7 +244,7 @@ command [:attach] do |c|
     else
       args.delete('new')
       params = parse_args args, :subnet_id, :security_groups, :primary_ip
-      Aws::ENI.assert_ifconfig_access if config
+      Aws::ENI.assert_interface_access if config
       interface = Aws::ENI.create_interface(params)
       puts "interface #{interface[:interface_id]} created on #{interface[:subnet_id]}"
       id = interface[:interface_id]
@@ -366,7 +360,7 @@ command [:assign] do |c|
     help_now! "Missing argument" if device.nil?
 
     params.merge! configure: !opts[:noconfig], block: opts[:block]
-    Aws::ENI.assert_ifconfig_access if params[:configure]
+    Aws::ENI.assert_interface_access if params[:configure]
 
     assignment = Aws::ENI.assign_secondary_ip(device, params)
     puts "IP #{assignment[:private_ip]} assigned to #{assignment[:device_name]} (#{assignment[:interface_id]})"
@@ -498,8 +492,8 @@ command [:test] do |c|
   c.action do |global,opts,args|
     help_now! "Too many arguments" if args.count > 1
 
-    print 'IFconfig permissions test... '
-    if Aws::ENI.can_modify_ifconfig?
+    print 'Interface permissions test... '
+    if Aws::ENI.can_modify_interface?
       puts 'success!'
     else
       puts 'failed'

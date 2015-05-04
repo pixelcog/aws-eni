@@ -4,7 +4,7 @@ require 'aws-eni/errors'
 
 module Aws
   module ENI
-    class IFconfig
+    class Interface
 
       class << self
         include Enumerable

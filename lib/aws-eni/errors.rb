@@ -1,16 +1,29 @@
-
 module Aws
   module ENI
-    class Error < RuntimeError; end
-    class TimeoutError < Error; end
-    class MissingParameterError < Error; end
-    class InvalidParameterError < Error; end
-    class UnknownInterfaceError < Error; end
-    class EnvironmentError < Error; end
-    class CommandError < Error; end
-    class PermissionError < CommandError; end
-    class AWSPermissionError < Error; end
-    class MetaBadResponse < Error; end
-    class MetaConnectionFailed < Error; end
+    module Errors
+      class ServiceError < RuntimeError; end
+
+      class EnvironmentError < ServiceError; end
+
+      class MetaNotFound < ServiceError; end
+      class MetaBadResponse < ServiceError; end
+      class MetaConnectionFailed < ServiceError; end
+
+      class InterfaceOperationError < ServiceError; end
+      class InterfacePermissionError < InterfaceOperationError; end
+
+      class ClientOperationError < ServiceError; end
+      class ClientPermissionError < ClientOperationError; end
+
+      class MissingInput < ServiceError; end
+      class InvalidInput < ServiceError; end
+      class TimeoutError < ServiceError; end
+
+      class UnknownInterface < ServiceError; end
+      class InvalidInterface < ServiceError; end
+
+      class UnknownAddress < ServiceError; end
+      class InvalidAddress < ServiceError; end
+    end
   end
 end

@@ -519,10 +519,14 @@ end
 
 # error handling
 
-on_error do |exception|
-  if Aws::ENI::PermissionError === exception
-    warn 'error: This action requires super-user privileges (try sudo)'
-    false
+on_error do |error|
+  case error
+  when Aws::ENI::Errors::InterfacePermissionError
+    warn 'Error: This action requires super-user privileges (try sudo)'
+  when Aws::ENI::Errors::ClientPermissionError
+    warn 'Error: Insufficient EC2 operation privileges (check AWS IAM policy)'
+  when Aws::ENI::Errors::ServiceError
+    warn "Error: #{error.message}"
   else
     true
   end

@@ -28,7 +28,7 @@ module Aws
           when /^[0-9\.]+$/
             find { |dev| dev.has_ip?(index) }
           end.tap do |dev|
-            raise UnknownInterfaceError, "No interface found matching #{index}" unless dev
+            raise Errors::UnknownInterface, "No interface found matching #{index}" unless dev
           end
         end
 
@@ -80,7 +80,7 @@ module Aws
           when /^subnet-/
             select { |dev| dev.subnet_id == filter }
           end.tap do |devs|
-            raise UnknownInterfaceError, "No interface found matching #{filter}" if devs.nil? || devs.empty?
+            raise Errors::UnknownInterface, "No interface found matching #{filter}" if devs.nil? || devs.empty?
           end
         end
 
@@ -88,7 +88,7 @@ module Aws
         def mutable?
           cmd('link set dev eth0') # innocuous command
           true
-        rescue PermissionError
+        rescue Errors::InterfacePermissionError
           false
         end
 
@@ -98,10 +98,10 @@ module Aws
           options[:errors] = true
           begin
             exec("/sbin/ip #{command}", options)
-          rescue CommandError => e
+          rescue Errors::InterfaceOperationError => e
             case e.message
             when /operation not permitted/i
-              raise PermissionError, "Operation not permitted"
+              raise Errors::InterfacePermissionError, "Operation not permitted"
             else
               raise if errors
             end
@@ -128,7 +128,7 @@ module Aws
             else
               error = e.read
               warn "Warning: #{error}" if verbose
-              raise CommandError, error if errors
+              raise Errors::InterfaceOperationError, error if errors
             end
           end
           output
@@ -139,7 +139,7 @@ module Aws
 
       def initialize(name, auto_config = true)
         unless name =~ /^eth([0-9]+)$/
-          raise UnknownInterfaceError, "Invalid interface: #{name}"
+          raise Errors::InvalidInterface, "Invalid interface: #{name}"
         end
         @name = name
         @device_number = $1.to_i
@@ -153,7 +153,7 @@ module Aws
           exists? && IO.read("/sys/class/net/#{name}/address").strip
         rescue Errno::ENOENT
         end.tap do |address|
-          raise UnknownInterfaceError, "Unknown interface: #{name}" unless address
+          raise Errors::UnknownInterface, "Interface #{name} not found on this machine" unless address
         end
       end
 
@@ -212,7 +212,7 @@ module Aws
         hwaddr = self.hwaddr
         Hash[
           Meta.connection do
-            Meta.interface(hwaddr, 'ipv4-associations/').to_s.lines.map do |public_ip|
+            Meta.interface(hwaddr, 'ipv4-associations/', not_found: '').lines.map do |public_ip|
               public_ip.strip!
               [ Meta.interface(hwaddr, "ipv4-associations/#{public_ip}"), public_ip ]
             end
@@ -368,7 +368,7 @@ module Aws
               "Unknown attribute: #{attr}"
             end
         end
-        raise UnknownInterfaceError, error if error
+        raise Errors::UnknownInterface, error if error
         self
       end
 

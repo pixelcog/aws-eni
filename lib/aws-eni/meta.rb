@@ -16,7 +16,7 @@ module Aws
         Errno::ENETUNREACH,
         Timeout::Error,
         SocketError,
-        MetaBadResponse,
+        Errors::MetaBadResponse,
       ]
 
       # Perform a GET request on an open HTTP connection to the EC2 instance
@@ -28,9 +28,10 @@ module Aws
           when 200
             response.body
           when 404
-            nil
+            raise Errors::MetaNotFound unless options[:not_found]
+            options[:not_found]
           else
-            raise MetaBadResponse
+            raise Errors::MetaBadResponse
           end
         end
       end
@@ -66,7 +67,7 @@ module Aws
             failed_attempts += 1
             retry
           else
-            raise MetaConnectionFailed, "EC2 Metadata request failed after #{retries} retries."
+            raise Errors::MetaConnectionFailed, "EC2 Metadata request failed after #{retries} retries."
           end
         ensure
           @open_connection = nil

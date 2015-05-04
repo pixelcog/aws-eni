@@ -361,7 +361,7 @@ module Aws
             when :ip, :has_ip
               "Interface #{name} does not have IP #{val}" unless has_ip? val
             when :public_ip
-              "Interface #{name} does not have private IP #{val}" unless public_ips.include? val
+              "Interface #{name} does not have public IP #{val}" unless public_ips.has_value? val
             when :local_ip, :private_ip
               "Interface #{name} does not have private IP #{val}" unless local_ips.include? val
             else

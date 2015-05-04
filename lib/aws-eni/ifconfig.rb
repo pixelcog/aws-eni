@@ -76,7 +76,7 @@ module Aws
           when nil
             to_a
           when /^eni-/, /^eth[0-9]+$/, /^[0-9a-f:]+$/i, /^[0-9\.]+$/
-            self[filter].to_a
+            [*self[filter]]
           when /^subnet-/
             select { |dev| dev.subnet_id == filter }
           end.tap do |devs|

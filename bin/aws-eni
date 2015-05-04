@@ -510,7 +510,7 @@ command [:test] do |c|
     end
 
     print 'AWS EC2 permissions test... '
-    if Aws::ENI.can_access_ec2?
+    if Aws::ENI.has_client_access?
       puts 'success!'
     else
       puts 'failed'

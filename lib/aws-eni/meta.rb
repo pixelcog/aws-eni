@@ -45,6 +45,7 @@ module Aws
       # Perform a GET request on the interface metadata and return the body of
       # any 200 response.
       def self.interface(hwaddr, path, options = {})
+        hwaddr ||= instance('network/interfaces/macs/').lines.first.strip
         instance("network/interfaces/macs/#{hwaddr}/#{path}", options)
       end
 

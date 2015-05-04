@@ -492,16 +492,22 @@ module Aws
         describe_addresses: nil,
         allocate_address: nil,
         release_address: {
-          dry_run: true,
-          allocation_id: 'eipalloc-no_exist'
+          allocation_id: 'eipalloc-abcd1234'
         },
         associate_address: {
-          allocation_id: 'eipalloc-no_exist',
+          allocation_id: 'eipalloc-abcd1234',
           network_interface_id: 'eni-abcd1234'
+        },
+        disassociate_address: {
+          association_id: 'eipassoc-abcd1234'
         }
-        # has no dry_run method
+        # these have no dry_run method
         # assign_private_ip_addresses: {
         #   network_interface_id: 'eni-abcd1234'
+        # }
+        # unassign_private_ip_addresses: {
+        #   network_interface_id: 'eni-abcd1234',
+        #   private_ip_addresses: ['0.0.0.0']
         # }
       }
       test_methods.each do |method, params|

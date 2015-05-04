@@ -467,13 +467,14 @@ module Aws
       }
     end
 
-    # test whether we have permission to modify our local configuration
-    def can_modify_interface?
+    # test whether we have permission to modify our machine's interface configuration
+    def has_interface_access?
       Interface.mutable?
     end
 
+    # throw exception if we cannot modify our machine's interface configuration
     def assert_interface_access
-      raise Errors::InterfacePermissionError, 'Insufficient user priveleges to configure network interfaces' unless can_modify_interface?
+      raise Errors::InterfacePermissionError, 'Insufficient user priveleges to configure network interfaces' unless has_interface_access?
     end
 
     # test whether we have permission to perform all necessary EC2 operations

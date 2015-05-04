@@ -502,7 +502,7 @@ command [:test] do |c|
     help_now! "Too many arguments" if args.count > 1
 
     print 'Interface permissions test... '
-    if Aws::ENI.can_modify_interface?
+    if Aws::ENI.has_interface_access?
       puts 'success!'
     else
       puts 'failed'

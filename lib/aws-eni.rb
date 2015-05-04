@@ -10,20 +10,20 @@ module Aws
     extend self
 
     def environment
-      @environment ||= {}.tap do |e|
-        hwaddr = IFconfig['eth0'].hwaddr
-        Meta.open_connection do |conn|
-          e[:instance_id] = Meta.http_get(conn, 'instance-id')
-          e[:availability_zone] = Meta.http_get(conn, 'placement/availability-zone')
-          e[:region] = e[:availability_zone].sub(/(.*)[a-z]/,'\1')
-          e[:vpc_id] = Meta.http_get(conn, "network/interfaces/macs/#{hwaddr}/vpc-id")
-          e[:vpc_cidr] = Meta.http_get(conn, "network/interfaces/macs/#{hwaddr}/vpc-ipv4-cidr-block")
+      @environment ||= {}.tap do |env|
+        hwaddr = IFconfig[0].hwaddr
+        Meta.connection do
+          env[:instance_id] =       Meta.instance('instance-id')
+          env[:availability_zone] = Meta.instance('placement/availability-zone')
+          env[:region] =            env[:availability_zone].sub(/(.*)[a-z]/,'\1')
+          env[:vpc_id] =            Meta.interface(hwaddr, 'vpc-id')
+          env[:vpc_cidr] =          Meta.interface(hwaddr, 'vpc-ipv4-cidr-block')
         end
-        unless e[:vpc_id]
+        unless env[:vpc_id]
           raise EnvironmentError, "Unable to detect VPC settings, library incompatible with EC2-Classic"
         end
       end.freeze
-    rescue ConnectionFailed
+    rescue MetaConnectionFailed
       raise EnvironmentError, "Unable to load EC2 meta-data"
     end
 
@@ -99,7 +99,7 @@ module Aws
       )
 
       if options[:block] || do_config || do_enable
-        wait_for 'the interface to attach', rescue: ConnectionFailed do
+        wait_for 'the interface to attach', rescue: MetaConnectionFailed do
           device.exists? && interface_status(device.interface_id) == 'in-use'
         end
       end

@@ -10,7 +10,7 @@ module Aws
     class CommandError < Error; end
     class PermissionError < CommandError; end
     class AWSPermissionError < Error; end
-    class BadResponse < Error; end
-    class ConnectionFailed < Error; end
+    class MetaBadResponse < Error; end
+    class MetaConnectionFailed < Error; end
   end
 end

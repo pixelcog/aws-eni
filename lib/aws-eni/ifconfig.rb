@@ -167,15 +167,14 @@ module Aws
       # Validate and return basic interface metadata
       def info
         hwaddr = self.hwaddr
-        unless @meta_cache && hwaddr == @meta_cache[:hwaddr]
-          dev_path = "network/interfaces/macs/#{hwaddr}"
-          Meta.open_connection do |conn|
-            raise BadResponse unless Meta.http_get(conn, "#{dev_path}/")
-            @meta_cache = {
-              hwaddr: hwaddr,
-              interface_id: Meta.http_get(conn, "#{dev_path}/interface-id"),
-              subnet_id:    Meta.http_get(conn, "#{dev_path}/subnet-id"),
-              subnet_cidr:  Meta.http_get(conn, "#{dev_path}/subnet-ipv4-cidr-block")
+        unless @meta_cache && @meta_cache[:hwaddr] == hwaddr
+          @meta_cache = Meta.connection do
+            raise MetaBadResponse unless Meta.interface(hwaddr, '')
+            {
+              hwaddr:       hwaddr,
+              interface_id: Meta.interface(hwaddr, 'interface-id'),
+              subnet_id:    Meta.interface(hwaddr, 'subnet-id'),
+              subnet_cidr:  Meta.interface(hwaddr, 'subnet-ipv4-cidr-block')
             }.freeze
           end
         end
@@ -210,17 +209,15 @@ module Aws
       end
 
       def public_ips
-        ip_assoc = {}
-        dev_path = "network/interfaces/macs/#{hwaddr}"
-        Meta.open_connection do |conn|
-          # return an array of configured ip addresses (primary + secondary)
-          Meta.http_get(conn, "#{dev_path}/ipv4-associations/").to_s.each_line do |public_ip|
-            public_ip.strip!
-            local_ip = Meta.http_get(conn, "#{dev_path}/ipv4-associations/#{public_ip}")
-            ip_assoc[local_ip] = public_ip
+        hwaddr = self.hwaddr
+        Hash[
+          Meta.connection do
+            Meta.interface(hwaddr, 'ipv4-associations/').to_s.lines.map do |public_ip|
+              public_ip.strip!
+              [ Meta.interface(hwaddr, "ipv4-associations/#{public_ip}"), public_ip ]
+            end
           end
-        end
-        ip_assoc
+        ]
       end
 
       # Enable our interface and create necessary routes
@@ -245,7 +242,7 @@ module Aws
         changes = 0
         prefix = self.prefix # prevent exists? check on each use
 
-        meta_ips = Meta.get("network/interfaces/macs/#{hwaddr}/local-ipv4s").lines.map(&:strip)
+        meta_ips = Meta.interface(hwaddr, 'local-ipv4s').lines.map(&:strip)
         local_primary, *local_aliases = local_ips
         meta_primary, *meta_aliases = meta_ips
 

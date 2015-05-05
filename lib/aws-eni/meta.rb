@@ -22,16 +22,21 @@ module Aws
       # Perform a GET request on an open HTTP connection to the EC2 instance
       # meta-data and return the body of any 200 response.
       def self.get(path, options = {})
-        connection(options) do |http|
-          response = http.request(Net::HTTP::Get.new(path))
-          case response.code.to_i
-          when 200
-            response.body
-          when 404
-            raise Errors::MetaNotFound unless options[:not_found]
-            options[:not_found]
-          else
-            raise Errors::MetaBadResponse
+        @cache ||= {}
+        if @cache[path] && options[:cache] != false
+          @cache[path]
+        else
+          connection(options) do |http|
+            response = http.request(Net::HTTP::Get.new(path))
+            case response.code.to_i
+            when 200
+              @cache[path] = response.body
+            when 404
+              raise Errors::MetaNotFound unless options[:not_found]
+              options[:not_found]
+            else
+              raise Errors::MetaBadResponse
+            end
           end
         end
       end
@@ -45,7 +50,6 @@ module Aws
       # Perform a GET request on the interface metadata and return the body of
       # any 200 response.
       def self.interface(hwaddr, path, options = {})
-        hwaddr ||= instance('network/interfaces/macs/').lines.first.strip
         instance("network/interfaces/macs/#{hwaddr}/#{path}", options)
       end
 

@@ -9,8 +9,16 @@ module Aws
 
       # determine the region from instance metadata
       def region
-        @region ||= Meta.instance('placement/availability-zone').sub(/^(.*)[a-z]$/,'\1')
+        Meta.instance('placement/availability-zone').sub(/^(.*)[a-z]$/,'\1')
       rescue Errors::MetaConnectionFailed
+        raise Errors::EnvironmentError, 'Unable to load EC2 meta-data'
+      end
+
+      # determine the vpc cidr block from instance metadata
+      def vpc_cidr
+        hwaddr = Meta.instance('network/interfaces/macs/').lines.first.strip.chomp('/')
+        Meta.interface(hwaddr, 'vpc-ipv4-cidr-block')
+      rescue Errors::MetaConnectionFailed, Errors::MetaNotFound
         raise Errors::EnvironmentError, 'Unable to load EC2 meta-data'
       end
 
@@ -47,7 +55,6 @@ module Aws
           when /^eipassoc-/
             'association-id'
           else
-            vpc_cidr = Meta.interface(nil, 'vpc-ipv4-cidr-block')
             if IPAddr.new(vpc_cidr) === IPAddr.new(address)
               'private-ip-address'
             else

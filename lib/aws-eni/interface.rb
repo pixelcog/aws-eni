@@ -212,9 +212,9 @@ module Aws
         hwaddr = self.hwaddr
         Hash[
           Meta.connection do
-            Meta.interface(hwaddr, 'ipv4-associations/', not_found: '').lines.map do |public_ip|
+            Meta.interface(hwaddr, 'ipv4-associations/', not_found: '', cache: false).lines.map do |public_ip|
               public_ip.strip!
-              [ Meta.interface(hwaddr, "ipv4-associations/#{public_ip}"), public_ip ]
+              [ Meta.interface(hwaddr, "ipv4-associations/#{public_ip}", cache: false), public_ip ]
             end
           end
         ]
@@ -242,7 +242,7 @@ module Aws
         changes = 0
         prefix = self.prefix # prevent exists? check on each use
 
-        meta_ips = Meta.interface(hwaddr, 'local-ipv4s').lines.map(&:strip)
+        meta_ips = Meta.interface(hwaddr, 'local-ipv4s', cache: false).lines.map(&:strip)
         local_primary, *local_aliases = local_ips
         meta_primary, *meta_aliases = meta_ips
 

@@ -341,6 +341,7 @@ module Aws
     # associate a private ip with an elastic ip through the AWS api
     def associate_elastic_ip(private_ip, options = {})
       raise Errors::MissingInput, 'You must specify a private IP address' unless private_ip
+      do_alloc = !!options[:new]
 
       find = options[:device_name] || options[:device_number] || options[:interface_id] || private_ip
       device = Interface[find].assert(
@@ -361,7 +362,8 @@ module Aws
         if options[:allocation_id] && eip[:allocation_id] != options[:allocation_id]
           raise Errors::InvalidAddress, "EIP #{eip[:public_ip]} (#{eip[:allocation_id]}) does not match #{options[:allocation_id]}"
         end
-      else
+      elsif do_alloc || !eip = Client.available_addresses.first
+        allocated = true
         eip = allocate_elastic_ip
       end
 
@@ -379,6 +381,7 @@ module Aws
         private_ip:     private_ip,
         device_name:    device.name,
         interface_id:   device.interface_id,
+        allocated:      !!allocated,
         public_ip:      eip[:public_ip],
         allocation_id:  eip[:allocation_id],
         association_id: resp[:association_id]

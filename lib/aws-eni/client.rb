@@ -69,6 +69,12 @@ module Aws
         resp[:addresses].first
       end
 
+      # retrieve a list of available addresses
+      def available_addresses
+        filters = [{ name: 'domain', values: ['vpc'] }]
+        describe_addresses(filters: filters)[:addresses].select{ |addr| !addr.association_id }
+      end
+
       # retrieve an array of private ips associated with the given interface
       def interface_private_ips(id)
         interface = describe_interface(id)

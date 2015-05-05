@@ -409,11 +409,15 @@ desc 'Associate a public IP address with a private IP address'
 long_desc %{
   Associate a private IP address with a new or existing public IP address.
 
-  If no public IP or allocation ID is provided, a new Elastic IP Address will be
-  allocated and used.
+  If no public IP or allocation ID is provided, an IP address will be selected
+  from among the unattached Elastic IP addresses available on tha account. If
+  no EIP is available, a new Elastic IP Address will be allocated and used.
 
-  If no interface ID or device name provided, it will be inferred from the ip
-  address.
+  If -n or the keyword "new" is uesd, it will always allocate a new address
+  by default rather than using one that is already available.
+
+  If no interface ID or device name provided, it will be inferred from the
+  private IP address provided.
 }
 arg 'private-ip'
 arg 'public-ip', :optional
@@ -424,13 +428,17 @@ command [:associate] do |c|
   c.desc 'Do not return until connection is verified'
   c.switch [:b,:block], negatable: false
 
+  c.desc 'Allocate a new public IP address (can also pass "new" as a parameter)'
+  c.switch [:n,:new], negatable: false
+
   c.action do |global,opts,args|
-    args.delete('new')
+    opts[:new] = !!args.delete('new') || opts[:new]
     params = parse_args args, :private_ip, :public_ip, :allocation_id, :interface_id, :device_name
-    params[:block] = opts[:block]
+    params.merge! new: opts[:new], block: opts[:block]
     help_now! "Missing argument" unless params[:private_ip]
 
     assoc = Aws::ENI.associate_elastic_ip(params[:private_ip], params)
+    puts "EIP #{assoc[:public_ip]} allocated as #{assoc[:allocation_id]}" if assoc[:allocated]
     puts "EIP #{assoc[:public_ip]} (#{assoc[:allocation_id]}) associated with #{assoc[:private_ip]} on #{assoc[:device_name]} (#{assoc[:interface_id]})"
   end
 end

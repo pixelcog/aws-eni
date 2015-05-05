@@ -98,7 +98,7 @@ module Aws
     end
 
     # attach network interface
-    def attach_interface(id, options = {})
+    def attach_interface(interface_id, options = {})
       do_enable = options[:enable] != false
       do_config = options[:configure] != false
       assert_interface_access if do_config || do_enable
@@ -107,12 +107,12 @@ module Aws
 
       begin
         response = Client.attach_network_interface(
-          network_interface_id: id,
+          network_interface_id: interface_id,
           instance_id: environment[:instance_id],
           device_index: device.device_number
         )
       rescue EC2::Errors::AttachmentLimitExceeded
-        raise Errors::ClientOperationError, "Unable to attach #{id} to #{device.name} (attachment limit exceeded)"
+        raise Errors::ClientOperationError, "Unable to attach #{interface_id} to #{device.name} (attachment limit exceeded)"
       end
 
       if options[:block] || do_config || do_enable
@@ -123,7 +123,7 @@ module Aws
       device.configure if do_config
       device.enable if do_enable
       {
-        interface_id:  device.interface_id,
+        interface_id:  interface_id,
         device_name:   device.name,
         device_number: device.device_number,
         enabled:       do_enable,
@@ -133,8 +133,8 @@ module Aws
     end
 
     # detach network interface
-    def detach_interface(id, options = {})
-      device = Interface[id].assert(
+    def detach_interface(selector, options = {})
+      device = Interface[selector].assert(
         exists: true,
         device_name:   options[:device_name],
         interface_id:  options[:interface_id],

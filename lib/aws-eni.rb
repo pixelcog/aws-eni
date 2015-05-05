@@ -16,12 +16,12 @@ module Aws
           instance_id:       Meta.instance('instance-id'),
           availability_zone: Meta.instance('placement/availability-zone'),
           region:            Meta.instance('placement/availability-zone').sub(/^(.*)[a-z]$/,'\1'),
-          vpc_id:            Meta.interface(hwaddr, 'vpc-id', not_found: nil),
-          vpc_cidr:          Meta.interface(hwaddr, 'vpc-ipv4-cidr-block', not_found: nil)
-        }
-      end.freeze.tap do |e|
-        raise Errors::EnvironmentError, 'Unable to detect VPC, library incompatible with EC2-Classic' unless e[:vpc_id]
+          vpc_id:            Meta.interface(hwaddr, 'vpc-id'),
+          vpc_cidr:          Meta.interface(hwaddr, 'vpc-ipv4-cidr-block')
+        }.freeze
       end
+    rescue Errors::MetaNotFound
+      raise Errors::EnvironmentError, 'Unable to detect VPC, library incompatible with EC2-Classic'
     rescue Errors::MetaConnectionFailed
       raise Errors::EnvironmentError, 'Unable to load EC2 meta-data'
     end

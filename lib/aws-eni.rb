@@ -449,6 +449,10 @@ module Aws
     # allocate a new elastic ip address
     def allocate_elastic_ip
       eip = Client.allocate_address(domain: 'vpc')
+      wait_for 'new elastic ip to become available', rescue: Errors::UnknownAddress do
+        # strangely this doesn't happen immediately in some cases
+        Client.describe_address(eip[:allocation_id])
+      end
       {
         public_ip:     eip[:public_ip],
         allocation_id: eip[:allocation_id]

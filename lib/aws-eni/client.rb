@@ -65,7 +65,7 @@ module Aws
           { name: 'domain', values: ['vpc'] },
           { name: filter_by, values: [address] }
         ])
-        raise Errors::UnknownAddress, "IP #{address} could not be located" if resp[:addresses].empty?
+        raise Errors::UnknownAddress, "No EIP with #{address} could be located" if resp[:addresses].empty?
         resp[:addresses].first
       end
 

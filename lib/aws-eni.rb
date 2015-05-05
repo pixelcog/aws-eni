@@ -142,23 +142,16 @@ module Aws
       )
       interface = Client.describe_interface(device.interface_id)
 
+      do_release = !!options[:release]
+      created_by_us = interface.tag_set.any? { |tag| tag.key == 'created by' && tag.value == owner_tag }
+      do_delete = options[:delete] != false && created_by_us
+
       if device.name == 'eth0'
         raise Errors::InvalidInterface, 'For safety, interface eth0 cannot be detached.'
       end
-
       unless interface[:attachment] && interface[:attachment][:instance_id] == environment[:instance_id]
-        raise Errors::UnknownInterface, "Interface #{interface_id} is not attached to this machine"
+        raise Errors::InvalidInterface, "Interface #{interface_id} is not attached to this machine"
       end
-
-      device.disable
-      device.deconfigure
-      Client.detach_network_interface(
-        attachment_id: interface[:attachment][:attachment_id],
-        force: true
-      )
-      created_by_us = interface.tag_set.any? { |tag| tag.key == 'created by' && tag.value == owner_tag }
-      do_delete = options[:delete] != false && created_by_us
-      do_release = !!options[:release]
 
       public_ips = []
       interface[:private_ip_addresses].each do |addr|
@@ -171,6 +164,12 @@ module Aws
         end
       end
 
+      device.disable
+      device.deconfigure
+      Client.detach_network_interface(
+        attachment_id: interface[:attachment][:attachment_id],
+        force: true
+      )
       if options[:block] || do_delete
         wait_for 'the interface to detach', interval: 0.3 do
           !device.exists? && !Client.interface_attached(interface[:network_interface_id])

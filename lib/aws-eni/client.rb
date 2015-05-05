@@ -41,7 +41,7 @@ module Aws
 
       # retrieve a single interface resource
       def describe_interface(id)
-        resp = describe_network_interfaces(network_interface_ids: [id])
+        resp = describe_network_interfaces(filters: [{ name: 'network-interface-id', values: [id] }])
         raise Errors::UnknownInterface, "Interface #{id} could not be located" if resp[:network_interfaces].empty?
         resp[:network_interfaces].first
       end

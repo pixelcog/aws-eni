@@ -65,13 +65,13 @@ def parse_args(args, *accept)
           help_now! "You may only specify one private IP address." if params[:private_ip]
           params[:private_ip] = arg
         else
-          help_now! "Invalid IP address: #{arg}"
+          help_now! "Invalid argument: #{arg}"
         end
       elsif accept.include?(:public_ip)
         help_now! "You may only specify one public IP address." if params[:public_ip]
         params[:public_ip] = arg
       else
-        help_now! "Invalid IP address: #{arg}"
+        help_now! "Invalid argument: #{arg}"
       end
     else
       help_now! "Invalid argument: #{arg}"

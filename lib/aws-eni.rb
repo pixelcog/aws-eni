@@ -99,8 +99,8 @@ module Aws
 
     # attach network interface
     def attach_interface(id, options = {})
-      do_enable = true unless options[:enable] == false
-      do_config = true unless options[:configure] == false
+      do_enable = options[:enable] != false
+      do_config = options[:configure] != false
       assert_interface_access if do_config || do_enable
 
       device = Interface[options[:device_number] || options[:name]].assert(exists: false)
@@ -193,7 +193,7 @@ module Aws
     def clean_interfaces(filter = nil, options = {})
       public_ips = []
       do_release = !!options[:release]
-      safe_mode = true unless options[:safe_mode] == false
+      safe_mode = options[:safe_mode] != false
 
       filters = [
         { name: 'vpc-id', values: [environment[:vpc_id]] },

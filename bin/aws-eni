@@ -230,14 +230,15 @@ arg 'subnet-id', :optional
 arg 'security-groups', :optional
 arg 'ip-address', :optional
 command [:attach] do |c|
-  c.desc 'Do not configure or enable the device after attachment (implies block)'
-  c.switch [:n,:noconfig], negatable: false
+  c.desc 'Do not configure and enable the device after attachment'
+  c.switch [:noconfig], negatable: false
 
-  c.desc 'Do not return until attachment is complete'
-  c.switch [:b,:block], negatable: false
+  c.desc 'Do not wait for attachment to complete (implies noconfig)'
+  c.switch [:n,:noblock], negatable: false
 
   c.action do |global,opts,args|
-    config = !opts[:noconfig]
+    block = !opts[:noblock]
+    config = block && !opts[:noconfig]
     if args.first =~ /^eni-/
       help_now! 'Too many arguments' if args.count > 1
       id = args.first
@@ -251,7 +252,7 @@ command [:attach] do |c|
       new_interface = true
     end
     begin
-      device = Aws::ENI.attach_interface(id, enable: config, configure: config, block: opts[:block])
+      device = Aws::ENI.attach_interface(id, enable: config, configure: config, block: block)
     rescue Aws::ENI::Errors::ClientOperationError => e
       warn e.message
       if new_interface && Aws::ENI.clean_interfaces(id, safe_mode: false)
@@ -276,20 +277,25 @@ long_desc %{
 }
 arg 'interface-id OR device-name'
 command [:detach] do |c|
-  c.desc 'Delete (or preserve) the unused ENI resource after dataching (implies block)'
-  c.switch [:d,:delete], default_value: :not_provided # GLI behavior workaround
+  c.desc 'Delete the unused ENI resource after dataching (implies block)'
+  c.switch [:d,:delete], negatable: false
+
+  c.desc 'Do not delete the unused ENI resource after dataching'
+  c.switch [:p,:preserve], negatable: false
 
   c.desc 'Release any associated public IP addresses'
   c.switch [:r,:release], negatable: false
 
-  c.desc 'Do not return until detachment is complete'
-  c.switch [:b,:block], negatable: false
+  c.desc 'Do not wait until detachment is complete'
+  c.switch [:n,:noblock], negatable: false
 
   c.action do |global,opts,args|
     help_now! "Missing argument" if args.empty?
+    help_now! "--delete and --preserve flags cannot be used together" if opts[:delete] && opts[:preserve]
     params = parse_args args, :interface_id, :device_name
-    params[:block] = opts[:block]
-    params[:delete] = opts[:delete] unless opts[:delete] == :not_provided
+    params[:block] = !opts[:noblock]
+    params[:delete] = true if opts[:delete]
+    params[:delete] = false if opts[:preserve]
     params[:release] = opts[:release]
     id = params[:device_name] || params[:interface_id]
 
@@ -357,18 +363,18 @@ long_desc %{
 arg 'ip-address', :optional
 arg 'interface-id OR device-name'
 command [:assign] do |c|
-  c.desc 'Do not configure the interface after assignment'
-  c.switch [:n,:noconfig], negatable: false
+  c.desc 'Do not configure the interface after assignment (implies noblock)'
+  c.switch [:noconfig], negatable: false
 
-  c.desc 'Do not return until connection is verified'
-  c.switch [:b,:block], negatable: false
+  c.desc 'Do not wait for the connection to be verified'
+  c.switch [:n,:noblock], negatable: false
 
   c.action do |global,opts,args|
     params = parse_args args, :interface_id, :device_name, :private_ip
     device = params[:device_name] || params[:interface_id]
     help_now! "Missing argument" if device.nil?
 
-    params.merge! configure: !opts[:noconfig], block: opts[:block]
+    params.merge! configure: !opts[:noconfig], block: !opts[:noblock] && !opts[:noconfig]
     Aws::ENI.assert_interface_access if params[:configure]
 
     assignment = Aws::ENI.assign_secondary_ip(device, params)
@@ -425,8 +431,8 @@ arg 'allocation-id', :optional
 arg 'interface-id', :optional
 arg 'device-name', :optional
 command [:associate] do |c|
-  c.desc 'Do not return until connection is verified'
-  c.switch [:b,:block], negatable: false
+  c.desc 'Do not wait for the connection to be verified'
+  c.switch [:noblock], negatable: false
 
   c.desc 'Allocate a new public IP address (can also pass "new" as a parameter)'
   c.switch [:n,:new], negatable: false
@@ -434,7 +440,7 @@ command [:associate] do |c|
   c.action do |global,opts,args|
     opts[:new] = !!args.delete('new') || opts[:new]
     params = parse_args args, :private_ip, :public_ip, :allocation_id, :interface_id, :device_name
-    params.merge! new: opts[:new], block: opts[:block]
+    params.merge! new: opts[:new], block: !opts[:noblock]
     help_now! "Missing argument" unless params[:private_ip]
 
     assoc = Aws::ENI.associate_elastic_ip(params[:private_ip], params)

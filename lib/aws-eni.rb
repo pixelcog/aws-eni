@@ -99,6 +99,7 @@ module Aws
 
     # attach network interface
     def attach_interface(interface_id, options = {})
+      do_block = options[:block] != false
       do_enable = options[:enable] != false
       do_config = options[:configure] != false
       assert_interface_access if do_config || do_enable
@@ -115,7 +116,7 @@ module Aws
         raise Errors::ClientOperationError, "Unable to attach #{interface_id} to #{device.name} (attachment limit exceeded)"
       end
 
-      if options[:block] || do_config || do_enable
+      if do_block || do_config || do_enable
         wait_for 'the interface to attach', rescue: Errors::MetaNotFound do
           device.exists? && Client.interface_attached(device.interface_id)
         end
@@ -145,6 +146,7 @@ module Aws
       do_release = !!options[:release]
       created_by_us = interface.tag_set.any? { |tag| tag.key == 'created by' && tag.value == owner_tag }
       do_delete = options[:delete] != false && created_by_us
+      do_block = options[:block] != false
 
       if device.name == 'eth0'
         raise Errors::InvalidInterface, 'For safety, interface eth0 cannot be detached.'
@@ -170,7 +172,7 @@ module Aws
         attachment_id: interface[:attachment][:attachment_id],
         force: true
       )
-      if options[:block] || do_delete
+      if do_block || do_delete
         wait_for 'the interface to detach', interval: 0.3 do
           !device.exists? && !Client.interface_attached(interface[:network_interface_id])
         end
@@ -254,6 +256,8 @@ module Aws
       )
       interface_id = device.interface_id
       current_ips = Client.interface_private_ips(interface_id)
+      do_config = options[:configure] != false
+      do_block = options[:block] != false
       new_ip = options[:private_ip]
 
       if new_ip
@@ -282,9 +286,9 @@ module Aws
         end
       end
 
-      unless options[:configure] == false
+      if do_config
         device.add_alias(new_ip)
-        if options[:block] && !Interface.test(new_ip, target: device.gateway)
+        if do_block && !Interface.test(new_ip, target: device.gateway)
           raise Errors::TimeoutError, 'Timed out waiting for IP address to become active'
         end
       end
@@ -342,6 +346,7 @@ module Aws
     def associate_elastic_ip(private_ip, options = {})
       raise Errors::MissingInput, 'You must specify a private IP address' unless private_ip
       do_alloc = !!options[:new]
+      do_block = options[:block] != false
 
       find = options[:device_name] || options[:device_number] || options[:interface_id] || private_ip
       device = Interface[find].assert(
@@ -374,7 +379,7 @@ module Aws
         allow_reassociation:  false
       )
 
-      if options[:block] && !Interface.test(private_ip)
+      if do_block && !Interface.test(private_ip)
         raise Errors::TimeoutError, 'Timed out waiting for ip address to become active'
       end
       {

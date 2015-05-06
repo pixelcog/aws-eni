@@ -260,6 +260,10 @@ module Aws
       do_block = options[:block] != false
       new_ip = options[:private_ip]
 
+      if do_block && !device.enabled?
+        raise Errors::InvalidParameter, "Interface #{device.name} is not enabled (cannot block)"
+      end
+
       if new_ip
         if current_ips.include?(new_ip)
           raise Errors::ClientOperationError, "IP #{new_ip} already assigned to #{device.name}"
@@ -358,6 +362,9 @@ module Aws
       )
       options[:public_ip] ||= options[:allocation_id]
 
+      if do_block && !device.enabled?
+        raise Errors::InvalidParameter, "Interface #{device.name} is not enabled (cannot block)"
+      end
       if public_ip = device.public_ips[private_ip]
         raise Errors::ClientOperationError, "IP #{private_ip} already has an associated EIP (#{public_ip})"
       end

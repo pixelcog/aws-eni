@@ -32,7 +32,7 @@ module Aws
             when 200
               @cache[path] = response.body
             when 404
-              raise Errors::MetaNotFound unless options[:not_found]
+              raise Errors::MetaNotFound unless options.has_key?(:not_found)
               options[:not_found]
             else
               raise Errors::MetaBadResponse

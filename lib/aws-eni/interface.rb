@@ -169,7 +169,7 @@ module Aws
         hwaddr = self.hwaddr
         unless @meta_cache && @meta_cache[:hwaddr] == hwaddr
           @meta_cache = Meta.connection do
-            raise MetaBadResponse unless Meta.interface(hwaddr, '')
+            raise Errors::MetaBadResponse unless Meta.interface(hwaddr, '', not_found: nil)
             {
               hwaddr:       hwaddr,
               interface_id: Meta.interface(hwaddr, 'interface-id'),
@@ -179,6 +179,8 @@ module Aws
           end
         end
         @meta_cache
+      rescue Errors::MetaConnectionFailed
+        raise Errors::InvalidInterface, "Interface #{name} could not be found in the EC2 instance meta-data"
       end
 
       def interface_id

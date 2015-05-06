@@ -11,7 +11,7 @@ program_desc 'Manage and sync local network config with AWS Elastic Network Inte
 @version = Aws::ENI::VERSION
 
 autocomplete_commands true
-subcommand_option_handling :normal
+subcommand_option_handling :legacy
 arguments :loose
 sort_help :manually
 

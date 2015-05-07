@@ -1,6 +1,10 @@
 # aws-eni
 
-A command line tool and client library to manage AWS Elastic Network Interfaces from within an EC2 instance.
+A command line tool and ruby library to manage AWS Elastic Network Interfaces from within an EC2 instance.
+
+## Notes
+
+Your AWS access credentials will be introspected from either the environment variables or the EC2 instance meta-data (see AWS IAM instance role documentation).  Any command which requires a modification of the machine's interface configuration will require super-user privileges to access `/sbin/ip`.
 
 ## Installation
 
@@ -18,45 +22,98 @@ Or install it yourself as:
 
     $ gem install aws-eni
 
-## Usage
+## Command Line Usage
 
 Synchronize your EC2 instance network interface config with AWS.
 
-    $ aws-eni sync
+    $ aws-eni config
+    synchronized interface config
 
 List all interface cards, their IPs, and their associations
 
     $ aws-eni list
-    eth0:
-      10.0.1.23
-    eth1:
-      10.0.2.54 => 54.25.169.87 (EIP)
-      10.0.2.72 => 52.82.17.251 (EIP)
+    eth0:   ID eni-c02ef998  HWaddr 0e:96:b1:4a:15:2c  Status UP
+            10.0.0.152 => 52.5.179.113
+    eth1:   ID eni-585afa03  HWaddr 0e:90:7a:00:bf:7d  Status UP
+            10.0.0.55
 
-Add a new private IP
+Add a secondary private IP
 
-    $ aws-eni add eth1
-    added 10.0.2.81
+    $ aws-eni assign eth1
+    IP 10.0.0.45 assigned to eth1 (eni-585afa03)
 
-Associate a new elastic IP
+    $ aws-eni list eth1
+    eth1:   ID eni-585afa03  HWaddr 0e:90:7a:00:bf:7d  Status UP
+            10.0.0.55
+            10.0.0.45
 
-    $ aws-eni associate 10.0.2.81
-    associated 10.0.2.81 => 52.171.254.36
+Associate a new Elastic IP
+
+    $ aws-eni assoc 10.0.0.45
+    EIP 52.5.141.210 (eipalloc-52117737) associated with 10.0.0.45 on eth1 (eni-585afa03)
+
+    $ aws-eni list eth1
+    eth1:   ID eni-585afa03  HWaddr 0e:90:7a:00:bf:7d  Status UP
+            10.0.0.55
+            10.0.0.45 => 52.5.141.210
+
+Test a WAN connection through our newly associated Elastic IP
+
+    $ aws-eni test 52.5.141.210
+    EIP 52.5.141.210 connection successful
+
+    $ curl --interface 10.0.0.45 ifconfig.me/ip
+    52.5.141.210
 
 Dissociate an elastic IP
 
-    $ aws-eni dissociate 10.0.2.81
-    dissociated 52.171.254.36 from 10.0.2.81
+    $ aws-eni dissoc 52.5.141.210
+    EIP 52.5.141.210 (eipalloc-52117737) dissociated with 10.0.0.45 on eth1 (eni-585afa03)
 
-Remove a private IP
+    $ aws-eni list eth1
+    eth1:   ID eni-585afa03  HWaddr 0e:90:7a:00:bf:7d  Status UP
+            10.0.0.55
+            10.0.0.45
 
-    $ aws-eni remove 10.0.2.81
-    removed 10.0.2.81 from eth1
+Remove a secondary private IP
+
+    $ aws-eni unassign 10.0.0.45
+    IP 10.0.0.45 removed from eth1 (eni-585afa03)
+
+    $ aws-eni list
+    eth0:   ID eni-c02ef998  HWaddr 0e:96:b1:4a:15:2c  Status UP
+            10.0.0.152 => 52.5.179.113
+    eth1:   ID eni-585afa03  HWaddr 0e:90:7a:00:bf:7d  Status UP
+            10.0.0.55
+
+## Library Usage
+
+```ruby
+require 'aws-eni'
+
+# create and attach a new interface
+interface = Aws::ENI.create_interface
+Aws::ENI.attach_interface(interface[:interface_id])
+
+puts "Attached #{interface[:interface_id]} to #{interface[:device_name]}"
+
+# add a secondary private IP to our new interface and associate an EIP
+assign = Aws::ENI.assign_secondary_ip(interface[:device_name])
+assoc = Aws::ENI.associate_elastic_ip(assign[:private_ip], block: false)
+
+puts "Associated #{assoc[:public_ip]} with #{assoc[:private_ip]} on #{assoc[:device_name]}"
+
+# verify our new public IP address (associate_elastic_ip normally does this
+# automatically if 'block' option is not false)
+if Aws::ENI.test_association(assoc[:public_ip])
+  puts "#{assoc[:public_ip]} can successfully connect to the internet via #{assoc[:private_ip]}"
+else
+```
 
 
 ## Contributing
 
-1. Fork it ( https://github.com/[my-github-username]/aws-eni/fork )
+1. Fork it ( https://github.com/pixelcog/aws-eni/fork )
 2. Create your feature branch (`git checkout -b my-new-feature`)
 3. Commit your changes (`git commit -am 'Add some feature'`)
 4. Push to the branch (`git push origin my-new-feature`)

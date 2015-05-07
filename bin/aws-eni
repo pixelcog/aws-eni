@@ -82,6 +82,8 @@ end
 
 # commands
 
+default_command :list
+
 desc 'List current interface configuration'
 long_desc %{
   List information about a set of interfaces including interface ID, interface
@@ -549,5 +551,6 @@ on_error do |error|
   end
 end
 
-ARGV << 'ls' if ARGV.empty?
+# work around GLI's odd -v option detection
+exit run %w[-v help] if (ARGV & %w[-v --version]).any?
 exit run(ARGV)

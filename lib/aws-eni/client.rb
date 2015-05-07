@@ -141,8 +141,7 @@ module Aws
             client.public_send(method, params.merge(dry_run: true))
           rescue EC2::Errors::DryRunOperation
             true
-          rescue EC2::Errors::InvalidAllocationIDNotFound
-            # release_address does not properly support dry_run
+          rescue EC2::Errors::InvalidAllocationIDNotFound, EC2::Errors::InvalidAssociationIDNotFound
             true
           rescue EC2::Errors::UnauthorizedOperation
             false

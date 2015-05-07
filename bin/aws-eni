@@ -507,13 +507,51 @@ command [:release] do |c|
   end
 end
 
-desc 'Test access to AWS EC2 and our machine\'s network config'
+desc 'Test a LAN or WAN connection through a specific IP'
+long_desc %{
+  Test a LAN or WAN connection with ICMP.  Provide a local IP address to test
+  its connection to the subnet gateway, or provide a public IP address to test
+  its connection to 8.8.8.8.
+}
+arg 'private-ip OR public-ip OR allocation-id'
+arg 'interface-id', :optional
+arg 'device-name', :optional
+command [:test] do |c|
+
+  c.desc 'How many seconds to wait for a response to the ICMP packets'
+  c.flag [:t,:timeout], default_value: 30, type: Integer
+
+  c.action do |global,opts,args|
+    params = parse_args args, :private_ip, :public_ip, :allocation_id, :association_id, :interface_id, :device_name
+    params[:timeout] = opts[:timeout]
+
+    if address = params[:public_ip] || params[:association_id] || params[:allocation_id]
+      if Aws::ENI.test_association(address, params)
+        puts "EIP #{address} connection successful"
+      else
+        puts "EIP #{address} failed to connect after #{opts[:timeout]} seconds"
+        exit! 1
+      end
+    elsif address = params[:private_ip]
+      if Aws::ENI.test_secondary_ip(address, params)
+        puts "IP #{address} connection successful"
+      else
+        puts "IP #{address} failed to connect after #{opts[:timeout]} seconds"
+        exit! 1
+      end
+    else
+      help_now! "Missing argument"
+    end
+  end
+end
+
+desc 'Check access to AWS EC2 and our machine\'s network config'
 long_desc %{
   Check for sufficient privileges to alter the local machine's network interface
   configuration and verify that the AWS access credentials include permissions
   necessary to perform all network related functions.
 }
-command [:test] do |c|
+command [:check] do |c|
   c.action do |global,opts,args|
     help_now! "Too many arguments" if args.count > 1
 

@@ -346,6 +346,22 @@ module Aws
       }
     end
 
+    # validate a local area connection on a secondary ip address
+    def test_secondary_ip(private_ip, options = {})
+      timeout = options[:timeout] || self.timeout
+
+      find = options[:device_name] || options[:device_number] || options[:interface_id] || private_ip
+      device = Interface[find].assert(
+        exists: true,
+        enabled: true,
+        device_name:   options[:device_name],
+        interface_id:  options[:interface_id],
+        device_number: options[:device_number],
+        private_ip:    private_ip
+      )
+      Interface.test(private_ip, target: device.gateway, timeout: timeout)
+    end
+
     # associate a private ip with an elastic ip through the AWS api
     def associate_elastic_ip(private_ip, options = {})
       raise Errors::MissingInput, 'You must specify a private IP address' unless private_ip
@@ -456,6 +472,57 @@ module Aws
         association_id: eip[:association_id],
         released:       do_release
       }
+    end
+
+    # validate an internet connection on a secondary ip address with an
+    # associated elastic ip
+    def test_association(address, options = {})
+      timeout = options[:timeout] || self.timeout
+
+      # assert device attributes if we've specified a device
+      if find = options[:device_name] || options[:device_number]
+        device = Interface[find].assert(
+          device_name:   options[:device_name],
+          device_number: options[:device_number],
+          interface_id:  options[:interface_id],
+          private_ip:    options[:private_ip],
+          public_ip:     options[:public_ip]
+        )
+      end
+
+      # get our address info
+      eip = Client.describe_address(address)
+      device ||= Interface.find { |dev| dev.interface_id == eip[:network_interface_id] }
+
+      # assert eip attributes if options provided
+      if options[:private_ip] && eip[:private_ip_address] != options[:private_ip]
+        raise Errors::InvalidAddress, "#{address} is not associated with IP #{options[:private_ip]}"
+      end
+      if options[:public_ip] && eip[:public_ip] != options[:public_ip]
+        raise Errors::InvalidAddress, "#{address} is not associated with public IP #{options[:public_ip]}"
+      end
+      if options[:allocation_id] && eip[:allocation_id] != options[:allocation_id]
+        raise Errors::InvalidAddress, "#{address} is not associated with allocation ID #{options[:allocation_id]}"
+      end
+      if options[:association_id] && eip[:association_id] != options[:association_id]
+        raise Errors::InvalidAddress, "#{address} is not associated with association ID #{options[:association_id]}"
+      end
+      if options[:interface_id] && eip[:network_interface_id] != options[:interface_id]
+        raise Errors::InvalidAddress, "#{address} is not associated with interface ID #{options[:interface_id]}"
+      end
+
+      # assert that this eip attached to an enabled, configured interface on this machine
+      unless device
+        raise Errors::InvalidAddress, "#{address} is not associated with an interface on this machine"
+      end
+      unless device.enabled?
+        raise Errors::InvalidAddress, "#{address} cannot be tested while #{device.name} is disabled"
+      end
+      unless device.local_ips.include?(eip[:private_ip_address])
+        raise Errors::InvalidAddress, "#{address} cannot be tested until #{device.name} is configured"
+      end
+
+      Interface.test(eip[:private_ip_address], timeout: timeout)
     end
 
     # allocate a new elastic ip address

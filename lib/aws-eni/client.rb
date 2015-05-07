@@ -26,6 +26,7 @@ module Aws
       def client
         @client ||= EC2::Client.new(region: region)
       rescue StandardError => e
+        raise if e === Errors::ServiceError
         raise Errors::EnvironmentError, 'Unable to initialize EC2 client'
       end
 
@@ -145,7 +146,7 @@ module Aws
             true
           rescue EC2::Errors::UnauthorizedOperation
             false
-          rescue
+          rescue EC2::Errors::ServiceError
             raise Errors::ClientOperationError, 'Unexpected behavior while testing EC2 client permissions'
           else
             raise Errors::ClientOperationError, 'Unexpected behavior while testing EC2 client permissions'

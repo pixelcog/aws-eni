@@ -6,6 +6,9 @@ module Aws
   module ENI
     class Interface
 
+      # Class level thread-safe lock
+      @lock = Mutex.new
+
       class << self
         include Enumerable
 
@@ -15,8 +18,10 @@ module Aws
         def [](index)
           case index
           when Integer
-            @instance_cache ||= []
-            @instance_cache[index] ||= new("eth#{index}", false)
+            @lock.synchronize do
+              @instance_cache ||= []
+              @instance_cache[index] ||= new("eth#{index}", false)
+            end
           when nil
             self[next_available_index]
           when /^(?:eth)?([0-9]+)$/
@@ -144,6 +149,7 @@ module Aws
         @name = name
         @device_number = $1.to_i
         @route_table = @device_number + 10000
+        @lock = Mutex.new
         configure if auto_config
       end
 
@@ -166,19 +172,21 @@ module Aws
 
       # Validate and return basic interface metadata
       def info
-        hwaddr = self.hwaddr
-        unless @meta_cache && @meta_cache[:hwaddr] == hwaddr
-          @meta_cache = Meta.connection do
-            raise Errors::MetaBadResponse unless Meta.interface(hwaddr, '', not_found: nil)
-            {
-              hwaddr:       hwaddr,
-              interface_id: Meta.interface(hwaddr, 'interface-id'),
-              subnet_id:    Meta.interface(hwaddr, 'subnet-id'),
-              subnet_cidr:  Meta.interface(hwaddr, 'subnet-ipv4-cidr-block')
-            }.freeze
+        @lock.synchronize do
+          hwaddr = self.hwaddr
+          unless @meta_cache && @meta_cache[:hwaddr] == hwaddr
+            @meta_cache = Meta.connection do
+              raise Errors::MetaBadResponse unless Meta.interface(hwaddr, '', not_found: nil)
+              {
+                hwaddr:       hwaddr,
+                interface_id: Meta.interface(hwaddr, 'interface-id'),
+                subnet_id:    Meta.interface(hwaddr, 'subnet-id'),
+                subnet_cidr:  Meta.interface(hwaddr, 'subnet-ipv4-cidr-block')
+              }.freeze
+            end
           end
+          @meta_cache
         end
-        @meta_cache
       rescue Errors::MetaConnectionFailed
         raise Errors::InvalidInterface, "Interface #{name} could not be found in the EC2 instance meta-data"
       end

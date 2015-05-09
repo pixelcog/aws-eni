@@ -9,16 +9,21 @@ module Aws
   module ENI
     extend self
 
+    # class level thread-safe lock
+    @lock = Mutex.new
+
     def environment
-      @environment ||= Meta.connection do
-        hwaddr = Meta.instance('network/interfaces/macs/').lines.first.strip.chomp('/')
-        {
-          instance_id:       Meta.instance('instance-id'),
-          availability_zone: Meta.instance('placement/availability-zone'),
-          region:            Meta.instance('placement/availability-zone').sub(/^(.*)[a-z]$/,'\1'),
-          vpc_id:            Meta.interface(hwaddr, 'vpc-id'),
-          vpc_cidr:          Meta.interface(hwaddr, 'vpc-ipv4-cidr-block')
-        }.freeze
+      @lock.synchronize do
+        @environment ||= Meta.connection do
+          hwaddr = Meta.instance('network/interfaces/macs/').lines.first.strip.chomp('/')
+          {
+            instance_id:       Meta.instance('instance-id'),
+            availability_zone: Meta.instance('placement/availability-zone'),
+            region:            Meta.instance('placement/availability-zone').sub(/^(.*)[a-z]$/,'\1'),
+            vpc_id:            Meta.interface(hwaddr, 'vpc-id'),
+            vpc_cidr:          Meta.interface(hwaddr, 'vpc-ipv4-cidr-block')
+          }.freeze
+        end
       end
     rescue Errors::MetaNotFound
       raise Errors::EnvironmentError, 'Unable to detect VPC, library incompatible with EC2-Classic'

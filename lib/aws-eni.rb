@@ -122,7 +122,7 @@ module Aws
       end
 
       if do_block || do_config || do_enable
-        wait_for 'the interface to attach', rescue: Errors::MetaNotFound do
+        wait_for 'the interface to attach', rescue: Errors::InvalidInterface do
           device.exists? && Client.interface_attached(device.interface_id)
         end
       end

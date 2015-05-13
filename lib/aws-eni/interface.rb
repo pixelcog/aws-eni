@@ -218,6 +218,15 @@ module Aws
         list.lines.grep(/inet ([0-9\.]+)\/.* #{name}/i){ $1 }
       end
 
+      # Return an array of ip addresses found in our instance metadata
+      def meta_ips
+        # hack to use cached hwaddr when available since this is often polled
+        # continuously for changes
+        hwaddr = (@meta_cache && @meta_cache[:hwaddr]) || hwaddr
+        Meta.interface(hwaddr, 'local-ipv4s', cache: false).lines.map(&:strip)
+      end
+
+      # Return a hash of local/public ip associations found in instance metadata
       def public_ips
         hwaddr = self.hwaddr
         Hash[
@@ -252,7 +261,6 @@ module Aws
         changes = 0
         prefix = self.prefix # prevent exists? check on each use
 
-        meta_ips = Meta.interface(hwaddr, 'local-ipv4s', cache: false).lines.map(&:strip)
         local_primary, *local_aliases = local_ips
         meta_primary, *meta_aliases = meta_ips
 

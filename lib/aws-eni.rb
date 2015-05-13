@@ -266,7 +266,7 @@ module Aws
       new_ip = options[:private_ip]
 
       if do_block && !device.enabled?
-        raise Errors::InvalidParameter, "Interface #{device.name} is not enabled (cannot block)"
+        raise Errors::InvalidParameter, "Interface #{device.name} is not enabled (cannot test connection)"
       end
 
       if new_ip
@@ -278,20 +278,15 @@ module Aws
           private_ip_addresses: [new_ip],
           allow_reassignment: false
         )
-        wait_for 'private ip address to be assigned' do
-          Client.interface_private_ips(interface_id).include?(new_ip) ||
-          device.local_ips.include?(new_ip)
-        end
       else
         Client.assign_private_ip_addresses(
           network_interface_id: interface_id,
           secondary_private_ip_address_count: 1,
           allow_reassignment: false
         )
-        wait_for 'new private ip address to be assigned' do
-          new_ips = Client.interface_private_ips(interface_id) - current_ips
-          new_ips = device.local_ips - current_ips if new_ips.empty?
-          new_ip = new_ips.first if new_ips
+        wait_for 'new private IP address to be assigned' do
+          client_ips = Client.interface_private_ips(interface_id)
+          new_ip = (client_ips - current_ips).first || (device.meta_ips - current_ips).first
         end
       end
 
@@ -299,6 +294,16 @@ module Aws
         device.add_alias(new_ip)
         if do_block && !Interface.test(new_ip, target: device.gateway, timeout: timeout)
           raise Errors::TimeoutError, 'Timed out waiting for IP address to become active'
+        end
+      end
+
+      if do_block
+        # ensure new state has propagated to avoid race conditions
+        wait_for 'new private IP address to appear in metadata' do
+          device.meta_ips.include?(new_ip)
+        end
+        wait_for 'new private IP address to appear in EC2 resource' do
+          Client.interface_private_ips(interface_id).include?(new_ip)
         end
       end
       {

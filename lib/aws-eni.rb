@@ -297,7 +297,7 @@ module Aws
 
       if do_config
         device.add_alias(new_ip)
-        if do_block && !Interface.test(new_ip, target: device.gateway)
+        if do_block && !Interface.test(new_ip, target: device.gateway, timeout: timeout)
           raise Errors::TimeoutError, 'Timed out waiting for IP address to become active'
         end
       end
@@ -407,7 +407,7 @@ module Aws
         allow_reassociation:  false
       )
 
-      if do_block && !Interface.test(private_ip)
+      if do_block && !Interface.test(private_ip, timeout: timeout)
         raise Errors::TimeoutError, 'Timed out waiting for ip address to become active'
       end
       {

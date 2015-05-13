@@ -588,7 +588,7 @@ module Aws
     def wait_for(task, options = {}, &block)
       errors = [*options[:rescue]]
       timeout = options[:timeout] || self.timeout
-      interval = options[:interval] || 0.1
+      interval = options[:interval] || 0.3
 
       until timeout < 0
         begin

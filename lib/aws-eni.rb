@@ -423,8 +423,14 @@ module Aws
         allow_reassociation:  false
       )
 
-      if do_block && !Interface.test(private_ip, timeout: timeout)
-        raise Errors::TimeoutError, 'Timed out waiting for ip address to become active'
+      if do_block
+        # ensure new state has propagated to avoid race conditions
+        wait_for 'public IP address to appear in metadata' do
+          device.public_ips.has_value?(eip[:public_ip])
+        end
+        if !Interface.test(private_ip, timeout: timeout)
+          raise Errors::TimeoutError, 'Timed out waiting for IP address to become active'
+        end
       end
       {
         private_ip:     private_ip,
@@ -441,6 +447,7 @@ module Aws
     # optionally release the public ip
     def dissociate_elastic_ip(address, options = {})
       do_release = !!options[:release]
+      do_block = options[:block] != false
 
       # assert device attributes if we've specified a device
       if find = options[:device_name] || options[:device_number]
@@ -484,6 +491,13 @@ module Aws
 
       Client.disassociate_address(association_id: eip[:association_id])
       Client.release_address(allocation_id: eip[:allocation_id]) if do_release
+
+      if device && do_block
+        # ensure new state has propagated to avoid race conditions
+        wait_for 'public IP address to be removed from metadata' do
+          !device.public_ips.has_value?(eip[:public_ip])
+        end
+      end
       {
         private_ip:     eip[:private_ip_address],
         device_name:    device && device.name,

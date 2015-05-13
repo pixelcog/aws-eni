@@ -466,11 +466,15 @@ command [:dissociate] do |c|
   c.desc 'Release the associated public IP address'
   c.switch [:r,:release], negatable: false
 
+  c.desc 'Do not wait for new interface state to propogate'
+  c.switch [:noblock], negatable: false
+
   c.action do |global,opts,args|
     params = parse_args args, :private_ip, :public_ip, :allocation_id, :association_id, :interface_id, :device_name
-    params[:release] = opts[:release]
     address = params[:private_ip] || params[:public_ip] || params[:association_id] || params[:allocation_id]
     help_now! "Missing argument" unless address
+
+    params.merge! release: opts[:release], block: !opts[:noblock]
     dissoc = Aws::ENI.dissociate_elastic_ip(address, params)
     if dissoc[:released]
       puts "EIP #{dissoc[:public_ip]} (#{dissoc[:allocation_id]}) dissociated from #{dissoc[:private_ip]} on #{dissoc[:device_name]} (#{dissoc[:interface_id]}) and released"

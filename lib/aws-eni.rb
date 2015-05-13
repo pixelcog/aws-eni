@@ -318,6 +318,7 @@ module Aws
     # remove a private ip using the AWS api and remove it from local config
     def unassign_secondary_ip(private_ip, options = {})
       do_release = !!options[:release]
+      do_block = options[:block] != false
 
       find = options[:device_name] || options[:device_number] || options[:interface_id] || private_ip
       device = Interface[find].assert(
@@ -345,6 +346,16 @@ module Aws
         network_interface_id: interface[:network_interface_id],
         private_ip_addresses: [private_ip]
       )
+
+      if do_block
+        # ensure new state has propagated to avoid race conditions
+        wait_for 'private IP address to be removed from metadata' do
+          !device.meta_ips.include?(private_ip)
+        end
+        wait_for 'private IP address to be removed from EC2 resource' do
+          !Client.interface_private_ips(device.interface_id).include?(private_ip)
+        end
+      end
       {
         private_ip:     private_ip,
         device_name:    device.name,

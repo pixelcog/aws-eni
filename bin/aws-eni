@@ -398,11 +398,14 @@ command [:unassign] do |c|
   c.desc 'Release any associated public IP address'
   c.switch [:r,:release], negatable: false
 
+  c.desc 'Do not wait for new interface state to propogate'
+  c.switch [:n,:noblock], negatable: false
+
   c.action do |global,opts,args|
     params = parse_args args, :interface_id, :device_name, :private_ip
     help_now! "Missing argument" unless params[:private_ip]
-    params[:release] = opts[:release]
 
+    params.merge! release: opts[:release], block: !opts[:noblock]
     unassign = Aws::ENI.unassign_secondary_ip(params[:private_ip], params)
     if unassign[:released]
       puts "EIP #{unassign[:public_ip]} (#{unassign[:allocation_id]}) dissociated from #{unassign[:private_ip]} and released"

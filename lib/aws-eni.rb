@@ -38,7 +38,7 @@ module Aws
 
     def timeout(new_default = nil)
       @timeout = new_default.to_i if new_default
-      @timeout ||= 30
+      @timeout ||= 120
     end
 
     def verbose(set_verbose = nil)

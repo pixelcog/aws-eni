@@ -233,7 +233,10 @@ module Aws
           Meta.connection do
             Meta.interface(hwaddr, 'ipv4-associations/', not_found: '', cache: false).lines.map do |public_ip|
               public_ip.strip!
-              [ Meta.interface(hwaddr, "ipv4-associations/#{public_ip}", cache: false), public_ip ]
+              unless private_ip = Meta.interface(hwaddr, "ipv4-associations/#{public_ip}", not_found: nil, cache: false)
+                raise Errors::MetaBadResponse
+              end
+              [ private_ip, public_ip ]
             end
           end
         ]

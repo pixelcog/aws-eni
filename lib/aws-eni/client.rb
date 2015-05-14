@@ -25,8 +25,9 @@ module Aws
       # lazy-load our ec2 client
       def client
         @client ||= EC2::Client.new(region: region)
-      rescue StandardError => e
-        raise if e === Errors::ServiceError
+      rescue Errors::ServiceError
+        raise
+      rescue
         raise Errors::EnvironmentError, 'Unable to initialize EC2 client'
       end
 

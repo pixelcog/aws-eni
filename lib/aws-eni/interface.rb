@@ -99,13 +99,14 @@ module Aws
 
         # Execute an 'ip' command
         def cmd(command, options = {})
+          options[:sudo] = options[:sudo] != false
           errors = options[:errors]
           options[:errors] = true
           begin
             exec("/sbin/ip #{command}", options)
           rescue Errors::InterfaceOperationError => e
             case e.message
-            when /operation not permitted/i
+            when /operation not permitted/i, /password is required/i
               raise Errors::InterfacePermissionError, "Operation not permitted"
             else
               raise if errors
@@ -125,6 +126,7 @@ module Aws
           output = nil
           errors = options[:errors]
           verbose = self.verbose || options[:verbose]
+          command = "sudo -n #{command}" if options[:sudo]
 
           puts command if verbose
           Open3.popen3(command) do |i,o,e,t|
@@ -213,8 +215,8 @@ module Aws
 
       # Return an array of configured ip addresses (primary + secondary)
       def local_ips
-        list = cmd("addr show dev #{name} primary") +
-               cmd("addr show dev #{name} secondary")
+        list = cmd("addr show dev #{name} primary", sudo: false) +
+               cmd("addr show dev #{name} secondary", sudo: false)
         list.lines.grep(/inet ([0-9\.]+)\/.* #{name}/i){ $1 }
       end
 
@@ -256,7 +258,7 @@ module Aws
 
       # Check whether our interface is enabled
       def enabled?
-        exists? && cmd("link show up").include?(name)
+        exists? && cmd("link show up", sudo: false).include?(name)
       end
 
       # Initialize a new interface config

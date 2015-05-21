@@ -110,6 +110,43 @@ if Aws::ENI.test_association(assoc[:public_ip])
 else
 ```
 
+## AWS Policy
+
+To use this utility, you will need to create and apply the following policy document.
+
+Name it something like "AmazonEC2ElasticNetworkInterfaceAccess" and attach it to your IAM instance role or IAM user.
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ec2:AllocateAddress",
+                "ec2:AssignPrivateIpAddresses",
+                "ec2:AssociateAddress",
+                "ec2:AttachNetworkInterface",
+                "ec2:CreateNetworkInterface",
+                "ec2:CreateTags",
+                "ec2:DeleteNetworkInterface",
+                "ec2:DescribeAddresses",
+                "ec2:DescribeAvailabilityZones",
+                "ec2:DescribeInternetGateways",
+                "ec2:DescribeNetworkInterfaces",
+                "ec2:DescribeSecurityGroups",
+                "ec2:DescribeSubnets",
+                "ec2:DetachNetworkInterface",
+                "ec2:DisassociateAddress",
+                "ec2:ModifyNetworkInterfaceAttribute",
+                "ec2:ReleaseAddress",
+                "ec2:UnassignPrivateIpAddresses"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
+```
 
 ## Contributing
 

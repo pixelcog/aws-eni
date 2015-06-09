@@ -24,6 +24,8 @@ module Aws
 
       class UnknownAddress < ServiceError; end
       class InvalidAddress < ServiceError; end
+
+      class LimitExceeded < ServiceError; end
     end
   end
 end

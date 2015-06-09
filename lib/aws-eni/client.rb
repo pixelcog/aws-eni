@@ -34,6 +34,8 @@ module Aws
       # pass along method calls to our lazy-loaded api client
       def method_missing(method, *args)
         client.public_send(method, *args)
+      rescue EC2::Errors::AttachmentLimitExceeded, EC2::Errors::PrivateIpAddressLimitExceeded, EC2::Errors::AddressLimitExceeded => e
+        raise Errors::LimitExceeded, "Limit exceeded: #{e.message}"
       rescue EC2::Errors::UnauthorizedOperation => e
         raise Errors::ClientPermissionError, "Operation not permitted: #{e.message}"
       rescue EC2::Errors::ServiceError => e

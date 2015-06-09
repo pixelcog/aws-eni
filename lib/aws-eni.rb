@@ -18,6 +18,7 @@ module Aws
           hwaddr = Meta.instance('network/interfaces/macs/').lines.first.strip.chomp('/')
           {
             instance_id:       Meta.instance('instance-id'),
+            instance_type:     Meta.instance('instance-type'),
             availability_zone: Meta.instance('placement/availability-zone'),
             region:            Meta.instance('placement/availability-zone').sub(/^(.*)[a-z]$/,'\1'),
             vpc_id:            Meta.interface(hwaddr, 'vpc-id'),
@@ -111,16 +112,15 @@ module Aws
 
       device = Interface[options[:device_number] || options[:name]].assert(exists: false)
 
-      begin
-        response = Client.attach_network_interface(
-          network_interface_id: interface_id,
-          instance_id: environment[:instance_id],
-          device_index: device.device_number
-        )
-      rescue EC2::Errors::AttachmentLimitExceeded
-        raise Errors::ClientOperationError, "Unable to attach #{interface_id} to #{device.name} (attachment limit exceeded)"
+      if Interface.count >= interface_limit
+        raise Errors::LimitExceeded, "Unable to attach #{interface_id} to #{device.name} (attachment limit exceeded)"
       end
 
+      response = Client.attach_network_interface(
+        network_interface_id: interface_id,
+        instance_id: environment[:instance_id],
+        device_index: device.device_number
+      )
       if do_block || do_config || do_enable
         wait_for 'the interface to attach', rescue: Errors::InvalidInterface do
           device.exists? && Client.interface_attached(device.interface_id)
@@ -264,6 +264,10 @@ module Aws
       do_config = options[:configure] != false
       do_block = options[:block] != false
       new_ip = options[:private_ip]
+
+      if current_ips.count >= interface_ip_limit
+        raise Errors::LimitExceeded, "Unable to assign #{new_ip || 'new IP'} to #{interface_id} (assignment limit exceeded)"
+      end
 
       if do_block && !device.enabled?
         raise Errors::InvalidParameter, "Interface #{device.name} is not enabled (cannot test connection)"
@@ -624,6 +628,66 @@ module Aws
         timeout -= interval
       end
       raise Errors::TimeoutError, "Timed out waiting for #{task}" unless timeout > 0
+    end
+
+    # aws interface and private ip address limits for each instance type
+    # transcribed from: http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-eni.html
+    RESOURCE_LIMITS = {
+      'c1.medium'   => [2, 6],
+      'c1.xlarge'   => [4, 15],
+      'c3.large'    => [3, 10],
+      'c3.xlarge'   => [4, 15],
+      'c3.2xlarge'  => [4, 15],
+      'c3.4xlarge'  => [8, 30],
+      'c3.8xlarge'  => [8, 30],
+      'c4.large'    => [3, 10],
+      'c4.xlarge'   => [4, 15],
+      'c4.2xlarge'  => [4, 15],
+      'c4.4xlarge'  => [8, 30],
+      'c4.8xlarge'  => [8, 30],
+      'cc2.8xlarge' => [8, 30],
+      'cg1.4xlarge' => [8, 30],
+      'cr1.8xlarge' => [8, 30],
+      'd2.xlarge'   => [4, 15],
+      'd2.2xlarge'  => [4, 15],
+      'd2.4xlarge'  => [8, 30],
+      'd2.8xlarge'  => [8, 30],
+      'g2.2xlarge'  => [4, 15],
+      'g2.8xlarge'  => [8, 30],
+      'hi1.4xlarge' => [8, 30],
+      'hs1.8xlarge' => [8, 30],
+      'i2.xlarge'   => [4, 15],
+      'i2.2xlarge'  => [4, 15],
+      'i2.4xlarge'  => [8, 30],
+      'i2.8xlarge'  => [8, 30],
+      'm1.small'    => [2, 4],
+      'm1.medium'   => [2, 6],
+      'm1.large'    => [3, 10],
+      'm1.xlarge'   => [4, 15],
+      'm2.xlarge'   => [4, 15],
+      'm2.2xlarge'  => [4, 30],
+      'm2.4xlarge'  => [8, 30],
+      'm3.medium'   => [2, 6],
+      'm3.large'    => [3, 10],
+      'm3.xlarge'   => [4, 15],
+      'm3.2xlarge'  => [4, 30],
+      'r3.large'    => [3, 10],
+      'r3.xlarge'   => [4, 15],
+      'r3.2xlarge'  => [4, 15],
+      'r3.4xlarge'  => [8, 30],
+      'r3.8xlarge'  => [8, 30],
+      't1.micro'    => [2, 2],
+      't2.micro'    => [2, 2],
+      't2.small'    => [2, 4],
+      't2.medium'   => [3, 6]
+    }.freeze
+
+    def interface_limit
+      Array(RESOURCE_LIMITS[environment[:instance_type]]).first || 8
+    end
+
+    def interface_ip_limit
+      Array(RESOURCE_LIMITS[environment[:instance_type]]).last || 30
     end
   end
 end

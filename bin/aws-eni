@@ -255,7 +255,7 @@ command [:attach] do |c|
     end
     begin
       device = Aws::ENI.attach_interface(id, enable: config, configure: config, block: block)
-    rescue Aws::ENI::Errors::ClientOperationError => e
+    rescue Aws::ENI::Errors::LimitExceeded => e
       warn e.message
       if new_interface && Aws::ENI.clean_interfaces(id, safe_mode: false)
         puts "interface #{id} deleted"

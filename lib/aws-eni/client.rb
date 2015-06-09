@@ -69,6 +69,8 @@ module Aws
         ])
         raise Errors::UnknownAddress, "No EIP with #{address} could be located" if resp[:addresses].empty?
         resp[:addresses].first
+      rescue IPAddr::InvalidAddressError
+        raise Errors::InvalidAddress, "Invalid address: #{address}"
       end
 
       # retrieve a list of available addresses

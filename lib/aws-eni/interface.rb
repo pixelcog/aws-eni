@@ -215,9 +215,12 @@ module Aws
 
       # Return an array of configured ip addresses (primary + secondary)
       def local_ips
-        list = cmd("addr show dev #{name} primary", sudo: false) +
-               cmd("addr show dev #{name} secondary", sudo: false)
+        list = cmd("addr show dev #{name} primary", sudo: false, errors: true) +
+               cmd("addr show dev #{name} secondary", sudo: false, errors: true)
         list.lines.grep(/inet ([0-9\.]+)\/.* #{name}/i){ $1 }
+      rescue
+        raise Errors::UnknownInterface, "Interface #{name} not found on this machine" unless exists?
+        raise
       end
 
       # Return an array of ip addresses found in our instance metadata

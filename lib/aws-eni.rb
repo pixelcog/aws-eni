@@ -270,7 +270,7 @@ module Aws
       end
 
       if do_block && !device.enabled?
-        raise Errors::InvalidParameter, "Interface #{device.name} is not enabled (cannot test connection)"
+        raise Errors::InvalidInput, "Interface #{device.name} is not enabled (cannot test connection)"
       end
 
       if new_ip
@@ -404,7 +404,7 @@ module Aws
       options[:public_ip] ||= options[:allocation_id]
 
       if do_block && !device.enabled?
-        raise Errors::InvalidParameter, "Interface #{device.name} is not enabled (cannot block)"
+        raise Errors::InvalidInput, "Interface #{device.name} is not enabled (cannot block)"
       end
       if public_ip = device.public_ips[private_ip]
         raise Errors::ClientOperationError, "IP #{private_ip} already has an associated EIP (#{public_ip})"

@@ -152,7 +152,8 @@ module Aws
           rescue EC2::Errors::UnauthorizedOperation
             false
           rescue EC2::Errors::ServiceError
-            raise Errors::ClientOperationError, 'Unexpected behavior while testing EC2 client permissions'
+            # raise Errors::ClientOperationError, 'Unexpected behavior while testing EC2 client permissions'
+            true
           else
             raise Errors::ClientOperationError, 'Unexpected behavior while testing EC2 client permissions'
           end

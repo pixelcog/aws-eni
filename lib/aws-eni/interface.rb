@@ -181,6 +181,7 @@ module Aws
               raise Errors::MetaBadResponse unless Meta.interface(hwaddr, '', not_found: nil)
               {
                 hwaddr:       hwaddr,
+                instance_id:  Meta.instance('instance-id'),
                 interface_id: Meta.interface(hwaddr, 'interface-id'),
                 subnet_id:    Meta.interface(hwaddr, 'subnet-id'),
                 subnet_cidr:  Meta.interface(hwaddr, 'subnet-ipv4-cidr-block')
@@ -233,17 +234,14 @@ module Aws
 
       # Return a hash of local/public ip associations found in instance metadata
       def public_ips
-        hwaddr = self.hwaddr
         Hash[
-          Meta.connection do
-            Meta.interface(hwaddr, 'ipv4-associations/', not_found: '', cache: false).lines.map do |public_ip|
-              public_ip.strip!
-              unless private_ip = Meta.interface(hwaddr, "ipv4-associations/#{public_ip}", not_found: nil, cache: false)
-                raise Errors::MetaBadResponse
-              end
-              [ private_ip, public_ip ]
+          Client.describe_addresses(filters: [
+            { name: 'domain', values: ['vpc'] },
+            { name: 'instance-id', values: [info[:instance_id]] },
+            { name: 'network-interface-id', values: [info[:interface_id]] }
+            ]).addresses.map do |addr|
+              [ addr[:private_ip_address], addr[:public_ip] ]
             end
-          end
         ]
       end
 
